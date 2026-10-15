@@ -124,21 +124,21 @@ describe("function mistakes (AC-14, AC-15)", () => {
 
 describe("recursion depth (AC-15)", () => {
   it("handles recursion of moderate depth", () => {
-    expect(out("int down(int n) { if (n == 0) { return 0; } return 1 + down(n - 1); } System.out.println(down(500));")).toBe("500");
+    expect(out("int down(int n) { if (n == 0) { return 0; } return 1 + down(n - 1); } System.out.println(down(300));")).toBe("300");
   });
 
   it("stops runaway recursion with a diagnostic, not a host exception", () => {
     const result = runOak("int f(int n) { return f(n + 1); } System.out.println(f(0)); System.out.println(1);");
     expect(result.diagnostics.map((d) => [d.phase, d.message])).toEqual([
-      ["runtime", "stack overflow: more than 1000 calls nested inside each other"],
+      ["runtime", "stack overflow: more than 400 calls nested inside each other"],
     ]);
     expect(result.stoppedEarly).toBe(true);
   });
 
   it("survives the deepest allowed recursion", () => {
-    const result = runOak("int down(int n) { if (n == 0) { return 0; } return 1 + down(n - 1); } System.out.println(down(990));");
+    const result = runOak("int down(int n) { if (n == 0) { return 0; } return 1 + down(n - 1); } System.out.println(down(399));");
     expect(result.diagnostics).toEqual([]);
-    expect(result.stdout).toBe("990\n");
+    expect(result.stdout).toBe("399\n");
   });
 });
 

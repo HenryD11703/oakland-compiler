@@ -1,0 +1,2 @@
+206:23 semantic: cannot assign string to int
+212:19 semantic: cannot assign int to string

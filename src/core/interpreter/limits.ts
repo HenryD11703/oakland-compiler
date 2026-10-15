@@ -11,10 +11,13 @@ export interface RunLimits {
   readonly maxArrayElements: number;
 }
 
+/** A run lists at most this many distinct problems; the rest are summarised in one last diagnostic. */
+export const MAX_DIAGNOSTICS = 200;
+
 export const DEFAULT_LIMITS: RunLimits = {
   maxSteps: 20_000_000,
   maxTimeMs: 5_000,
-  maxDepth: 1_000,
+  maxDepth: 400,
   maxOutputChars: 200_000,
   maxArrayElements: 1_000_000,
 };

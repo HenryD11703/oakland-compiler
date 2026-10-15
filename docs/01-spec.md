@@ -74,7 +74,7 @@ Syntax is unchanged from the original except where stated. The full reference li
 
 ## Execution safety
 
-- **AC-24** Runs happen in a Web Worker. Defaults: 20,000,000 evaluation steps (measured: about 2 million steps take 0.1-0.3 s, so 2 million was far below what 5 s allows), 5 seconds, up to 1,000 nested calls (fewer if each call nests deeply: the JavaScript stack gives out first, and that is reported too), 200,000 characters of output. Reaching a limit stops the run with a diagnostic on the offending statement and keeps the output produced so far.
+- **AC-24** Runs happen in a Web Worker. Defaults: 20,000,000 evaluation steps (measured: about 2 million steps take 0.1-0.3 s, so 2 million was far below what 5 s allows), 5 seconds, 400 nested calls (measured: on a cold start the JavaScript stack gives out at roughly 450 levels of calls with blocks to 800 simple calls, so 400 is the number that always ends with the clear message; a call that nests very deeply may hit the stack first, and that is reported as a stack overflow too), 200,000 characters of output. Reaching a limit stops the run with a diagnostic on the offending statement and keeps the output produced so far.
 - **AC-25** A Stop button cancels a running program within 500 ms, and the page stays responsive during the run (a `while (true) {}` can be started and stopped).
 
 ## The views

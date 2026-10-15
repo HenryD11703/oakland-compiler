@@ -1,0 +1,5 @@
+116:19 semantic: parseInt cannot convert "Hola" to an int
+117:20 semantic: parseInt expects a string, but got float
+129:22 semantic: parsefloat cannot convert "Hola" to a float
+143:21 semantic: toLowerCase expects a string, but got int
+151:21 semantic: toUpperCase expects a string, but got int

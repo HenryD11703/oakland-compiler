@@ -1,0 +1,55 @@
+********** Funciones no recursivas sin parámetros **********
+1. void
+Hola
+
+2. Con retorno
+30
+********** Funciones no recursivas con parámetros **********
+1. void
+Hola mundo
+
+2. Con retorno
+30
+********** Funciones recursivas **********
+1. Factorial
+120
+
+2. Fibonacci
+55
+
+3. Hanoi
+Mover disco 1 de  A  a  C
+Mover disco  2  de  A  a  B
+Mover disco 1 de  C  a  B
+Mover disco  3  de  A  a  C
+Mover disco 1 de  B  a  A
+Mover disco  2  de  B  a  C
+Mover disco 1 de  A  a  C
+********** Función definida dentro de bloque **********
+40
+********** Funciones embebidas **********
+1. parseInt
+10
+10
+
+2. parsefloat
+10.0
+10.5
+
+3. toString
+10
+10.510
+php es el mejor lenguaje: false
+
+4. toLowerCase
+hola mundo
+
+5. toUpperCase
+HOLA MUNDO
+
+6. typeof
+int
+float
+string
+char
+boolean

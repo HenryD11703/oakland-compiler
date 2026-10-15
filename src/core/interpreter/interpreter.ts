@@ -24,10 +24,13 @@ import type {
   Update,
   VarDecl,
 } from "../parser/ast";
-import type { Span } from "../span";
+import { endOf, joinSpans, type Span } from "../span";
+import { SymbolCollector, type SymbolEntry, type SymbolKind } from "../symbols";
+import { TraceRecorder } from "../trace/recorder";
+import type { Trace } from "../trace/types";
 import { BUILTINS } from "./builtins";
 import { Environment, type Binding, type FunctionEntry, type StructEntry } from "./environment";
-import { DEFAULT_LIMITS, RunAbort, type RunLimits } from "./limits";
+import { DEFAULT_LIMITS, MAX_DIAGNOSTICS, RunAbort, type RunLimits } from "./limits";
 import {
   arrayTypeOf,
   baseTypeOf,
@@ -63,7 +66,22 @@ export interface InterpretResult {
   readonly steps: number;
   /** True when a limit (steps, time, depth, output) ended the run early. */
   readonly stoppedEarly: boolean;
+  /** Every name the program declared (AC-30). */
+  readonly symbols: SymbolEntry[];
+  /** Step-by-step record of the run, or null when tracing was turned off (AC-31). */
+  readonly trace: Trace | null;
 }
+
+export interface InterpretOptions {
+  readonly limits?: Partial<RunLimits>;
+  /** A clock in milliseconds; tests pass a fake one. */
+  readonly now?: () => number;
+  /** Record the trace (default true). */
+  readonly trace?: boolean;
+}
+
+/** The statements that make a step of their own in the trace. */
+const STEP_STATEMENTS: ReadonlySet<string> = new Set(["ExprStmt", "Update", "Print", "Return", "Break", "Continue", "VarDecl"]);
 
 type Completion =
   | { readonly kind: "normal" }
@@ -99,26 +117,32 @@ function numberOf(value: Value): number {
 }
 
 /** Runs a parsed program. Never throws: problems become diagnostics. */
-export function interpret(program: Program, limits: Partial<RunLimits> = {}, now: () => number = Date.now): InterpretResult {
-  return new Interpreter({ ...DEFAULT_LIMITS, ...limits }, now).run(program);
+export function interpret(program: Program, options: InterpretOptions = {}): InterpretResult {
+  return new Interpreter({ ...DEFAULT_LIMITS, ...options.limits }, options.now ?? Date.now, options.trace ?? true).run(program);
 }
 
 class Interpreter {
   private readonly output: string[] = [];
   private outputLength = 0;
   private readonly diagnostics: Diagnostic[] = [];
+  private readonly seenDiagnostics = new Set<string>();
+  private diagnosticsFull = false;
   private readonly global = new Environment(null, "global");
   private steps = 0;
   private depth = 0;
   private stoppedEarly = false;
   private readonly startedAt: number;
   private lastSpan: Span | null = null;
+  private readonly symbols = new SymbolCollector();
+  private readonly trace: TraceRecorder | null;
 
   constructor(
     private readonly limits: RunLimits,
     private readonly now: () => number,
+    traceEnabled: boolean,
   ) {
     this.startedAt = now();
+    this.trace = traceEnabled ? new TraceRecorder(this.global) : null;
   }
 
   run(program: Program): InterpretResult {
@@ -137,12 +161,63 @@ class Interpreter {
         this.report("runtime", `internal error: ${message}`, this.lastSpan ?? program.span);
       }
     }
-    return { stdout: this.output.join(""), diagnostics: this.diagnostics, steps: this.steps, stoppedEarly: this.stoppedEarly };
+    return {
+      stdout: this.output.join(""),
+      diagnostics: this.diagnostics,
+      steps: this.steps,
+      stoppedEarly: this.stoppedEarly,
+      symbols: this.symbols.toArray(),
+      trace: this.trace ? this.trace.finish(endOf(program.span)) : null,
+    };
+  }
+
+  // ---------- scopes, symbols and trace helpers ----------
+
+  /** A `{ }` block: a new scope that the trace is told about when it opens and closes. */
+  private execScopedBlock(body: readonly Statement[], env: Environment): Completion {
+    const scope = new Environment(env, "block");
+    this.trace?.pushScope(scope, scope.label);
+    try {
+      return this.execBlock(body, scope);
+    } finally {
+      this.trace?.popScope();
+    }
+  }
+
+  private scopePath(env: Environment): string {
+    const labels: string[] = [];
+    for (let scope: Environment | null = env; scope !== null; scope = scope.parent) labels.unshift(scope.label);
+    return labels.length > 1 ? labels.slice(1).join(" > ") : "global";
+  }
+
+  private addSymbol(name: string, kind: SymbolKind, type: string, env: Environment, span: Span): void {
+    this.symbols.add({ name, kind, type, scope: this.scopePath(env), span });
+  }
+
+  /** Evaluates a condition as a step of its own in the trace, noting whether it held. */
+  private evalStepCondition(expression: Expression, env: Environment): boolean | null {
+    this.trace?.beginStep("condition", expression.span);
+    const result = this.evalCondition(expression, env);
+    if (result !== null) this.trace?.note(String(result));
+    return result;
   }
 
   // ---------- reporting and limits ----------
 
+  /**
+   * The same mistake on the same piece of code is listed once, however many times a loop runs it, and a run
+   * lists at most MAX_DIAGNOSTICS problems.
+   */
   private report(phase: Phase, message: string, span: Span): void {
+    if (this.diagnosticsFull) return;
+    const key = `${phase}|${span.start.offset}|${span.end.offset}|${message}`;
+    if (this.seenDiagnostics.has(key)) return;
+    this.seenDiagnostics.add(key);
+    if (this.diagnostics.length >= MAX_DIAGNOSTICS) {
+      this.diagnosticsFull = true;
+      this.diagnostics.push(diagnostic("runtime", `more than ${MAX_DIAGNOSTICS} problems: the rest are not listed`, span));
+      return;
+    }
     this.diagnostics.push(diagnostic(phase, message, span));
   }
 
@@ -180,6 +255,7 @@ class Interpreter {
       this.abort(span, `output limit reached (${this.limits.maxOutputChars.toLocaleString("en-US")} characters)`);
     }
     this.output.push(text);
+    this.trace?.output(this.outputLength);
   }
 
   // ---------- declarations ----------
@@ -207,13 +283,19 @@ class Interpreter {
       this.semantic(decl.nameSpan, `'${decl.name}' is already declared in this scope`);
       return;
     }
+    this.addSymbol(decl.name, "struct", decl.name, env, decl.nameSpan);
     // Field types may name structs declared later in the same list, so they are checked on first use (see typeExists).
   }
 
   private declareFunction(decl: FuncDecl, env: Environment): void {
     if (!env.firstVisit(decl)) return;
     const entry: FunctionEntry = { kind: "function", name: decl.name, decl, closure: env, declaredAt: decl.nameSpan };
-    if (!env.declare(entry)) this.semantic(decl.nameSpan, `'${decl.name}' is already declared in this scope`);
+    if (!env.declare(entry)) {
+      this.semantic(decl.nameSpan, `'${decl.name}' is already declared in this scope`);
+      return;
+    }
+    const signature = `${typeNameOf(decl.returnType)}(${decl.params.map((p) => typeNameOf(p.type)).join(", ")})`;
+    this.addSymbol(decl.name, "function", signature, env, decl.nameSpan);
   }
 
   private typeExists(type: string, env: Environment): boolean {
@@ -235,7 +317,7 @@ class Interpreter {
     if (stmt.declaredType === null) {
       // var x = expr;  the type is whatever the value has.
       const init = stmt.init as Expression;
-      const value = this.evalValue(init, env);
+      const value = this.evaluate(init, env);
       if (isError(value)) {
         type = "error";
         poisoned = true;
@@ -268,6 +350,9 @@ class Interpreter {
 
     const binding: Binding = { kind: "variable", name: stmt.name, type, value: raw, poisoned, declaredAt: stmt.nameSpan };
     env.declare(binding);
+    const shownType = type === "error" ? (stmt.declaredType ? typeNameOf(stmt.declaredType) : "var") : type;
+    this.addSymbol(stmt.name, isArrayType(shownType) ? "array" : "variable", shownType, env, stmt.nameSpan);
+    this.trace?.declare(binding);
   }
 
   /** `int[] b = a;` copies the array (the course's "por copia"); every other way of getting an array shares it. */
@@ -277,7 +362,7 @@ class Interpreter {
   }
 
   private evalInitializer(init: Initializer, expected: string, env: Environment): Value {
-    if (init.kind !== "ArrayLiteral") return this.evalValue(init, env);
+    if (init.kind !== "ArrayLiteral") return this.evaluate(init, env);
     if (!isArrayType(expected)) return this.semantic(init.span, `cannot use a list of values for type ${expected}`);
     return this.evalArrayLiteral(init, expected, env);
   }
@@ -299,7 +384,7 @@ class Interpreter {
         items.push(inner.value);
         return;
       }
-      const value = this.evalValue(element, env);
+      const value = this.evaluate(element, env);
       if (isError(value)) {
         failed = true;
         items.push(null);
@@ -327,25 +412,31 @@ class Interpreter {
 
   private exec(stmt: Statement, env: Environment): Completion {
     this.tick(stmt.span);
+    if (this.trace !== null && STEP_STATEMENTS.has(stmt.kind)) this.trace.beginStep("statement", stmt.span);
     switch (stmt.kind) {
       case "Block":
-        return this.execBlock(stmt.body, new Environment(env, "block"));
+        return this.execScopedBlock(stmt.body, env);
       case "ExprStmt":
-        this.evaluate(stmt.expression, env);
+        if (stmt.expression.kind === "Call") {
+          this.tick(stmt.expression.span);
+          this.evalCall(stmt.expression, env);
+        } else {
+          this.evaluate(stmt.expression, env);
+        }
         return NORMAL;
       case "Update":
         this.execUpdate(stmt, env);
         return NORMAL;
       case "Print": {
         const parts = stmt.args.map((arg) => {
-          const value = this.evalValue(arg, env);
+          const value = this.evaluate(arg, env);
           return display(value.value, value.type);
         });
         this.emit(`${parts.join(" ")}\n`, stmt.span);
         return NORMAL;
       }
       case "If": {
-        const condition = this.evalCondition(stmt.condition, env);
+        const condition = this.evalStepCondition(stmt.condition, env);
         if (condition === null) return NORMAL;
         if (condition) return this.exec(stmt.then, env);
         return stmt.otherwise ? this.exec(stmt.otherwise, env) : NORMAL;
@@ -363,7 +454,7 @@ class Interpreter {
       case "Continue":
         return CONTINUE;
       case "Return":
-        return { kind: "return", value: stmt.value ? this.evalValue(stmt.value, env) : null };
+        return { kind: "return", value: stmt.value ? this.evaluate(stmt.value, env) : null };
       case "VarDecl":
         this.execVarDecl(stmt, env);
         return NORMAL;
@@ -378,7 +469,7 @@ class Interpreter {
 
   /** A condition must be a boolean. Returns null (after reporting, unless already reported) when it is not usable. */
   private evalCondition(expression: Expression, env: Environment): boolean | null {
-    const value = this.evalValue(expression, env);
+    const value = this.evaluate(expression, env);
     if (isError(value)) return null;
     if (value.type !== "boolean") {
       this.semantic(expression.span, `the condition must be boolean, but it is ${value.type}`);
@@ -392,7 +483,7 @@ class Interpreter {
   }
 
   private execWhile(condition: Expression, body: Statement, env: Environment): Completion {
-    while (this.evalCondition(condition, env) === true) {
+    while (this.evalStepCondition(condition, env) === true) {
       const completion = this.exec(body, env);
       if (completion.kind === "break") break;
       if (completion.kind === "return") return completion;
@@ -402,19 +493,25 @@ class Interpreter {
 
   private execFor(stmt: For, env: Environment): Completion {
     const loopEnv = new Environment(env, "for");
-    if (stmt.init) this.exec(stmt.init, loopEnv);
-    while (this.evalCondition(stmt.condition, loopEnv) === true) {
-      const completion = this.exec(stmt.body, loopEnv);
-      if (completion.kind === "break") break;
-      if (completion.kind === "return") return completion;
-      if (stmt.update.kind === "Update") this.execUpdate(stmt.update, loopEnv);
-      else this.evaluate(stmt.update, loopEnv);
+    this.trace?.pushScope(loopEnv, loopEnv.label);
+    try {
+      if (stmt.init) this.exec(stmt.init, loopEnv);
+      while (this.evalStepCondition(stmt.condition, loopEnv) === true) {
+        const completion = this.exec(stmt.body, loopEnv);
+        if (completion.kind === "break") break;
+        if (completion.kind === "return") return completion;
+        this.trace?.beginStep("statement", stmt.update.span);
+        if (stmt.update.kind === "Update") this.execUpdate(stmt.update, loopEnv);
+        else this.evaluate(stmt.update, loopEnv);
+      }
+      return NORMAL;
+    } finally {
+      this.trace?.popScope();
     }
-    return NORMAL;
   }
 
   private execForeach(stmt: Foreach, env: Environment): Completion {
-    const iterable = this.evalValue(stmt.iterable, env);
+    const iterable = this.evaluate(stmt.iterable, env);
     if (isError(iterable)) return NORMAL;
     if (!isArrayType(iterable.type)) {
       this.semantic(stmt.iterable.span, `a for-each loop needs an array, but this is ${iterable.type}`);
@@ -437,15 +534,25 @@ class Interpreter {
     for (let i = 0; i < array.items.length; i++) {
       const iteration = new Environment(env, "for-each");
       const raw = array.items[i];
-      iteration.declare({
+      const binding: Binding = {
         kind: "variable",
         name: stmt.name,
         type: variableType,
         value: coerce({ type: elementType, value: raw }, variableType),
         poisoned: false,
         declaredAt: stmt.nameSpan,
-      });
-      const completion = this.exec(stmt.body, iteration);
+      };
+      iteration.declare(binding);
+      this.addSymbol(stmt.name, isArrayType(variableType) ? "array" : "variable", variableType, iteration, stmt.nameSpan);
+      this.trace?.pushScope(iteration, iteration.label);
+      let completion: Completion;
+      try {
+        this.trace?.beginStep("iteration", joinSpans(stmt.varType?.span ?? stmt.nameSpan, stmt.iterable.span));
+        this.trace?.declare(binding);
+        completion = this.exec(stmt.body, iteration);
+      } finally {
+        this.trace?.popScope();
+      }
       if (completion.kind === "break") break;
       if (completion.kind === "return") return completion;
     }
@@ -453,16 +560,25 @@ class Interpreter {
   }
 
   private execSwitch(stmt: Switch, env: Environment): Completion {
-    const subject = this.evalValue(stmt.discriminant, env);
+    this.trace?.beginStep("condition", stmt.discriminant.span);
+    const subject = this.evaluate(stmt.discriminant, env);
     if (isError(subject)) return NORMAL;
     const switchEnv = new Environment(env, "switch");
+    this.trace?.pushScope(switchEnv, switchEnv.label);
+    try {
+      return this.runSwitch(stmt, subject, switchEnv);
+    } finally {
+      this.trace?.popScope();
+    }
+  }
 
+  private runSwitch(stmt: Switch, subject: Value, switchEnv: Environment): Completion {
     // Find the first case that matches; from there every statement runs until a break (fall-through).
     let start = -1;
     for (let i = 0; i < stmt.cases.length && start === -1; i++) {
       const branch = stmt.cases[i];
       if (!branch) continue;
-      const candidate = this.evalValue(branch.test, switchEnv);
+      const candidate = this.evaluate(branch.test, switchEnv);
       if (isError(candidate)) continue;
       const equal = this.valuesEqual(subject, candidate);
       if (equal === undefined) {
@@ -540,11 +656,13 @@ class Interpreter {
         if (binding.type === "error") binding.type = value.type;
         binding.value = coerce(value, binding.type);
         binding.poisoned = false;
+        this.trace?.setVariable(binding);
         return { type: binding.type, value: binding.value };
       },
       clear: () => {
         binding.value = null;
         binding.poisoned = true;
+        this.trace?.setVariable(binding);
       },
     };
   }
@@ -559,16 +677,18 @@ class Interpreter {
       get: () => ({ type: elementType, value: array.items[position] }),
       set: (value) => {
         array.items[position] = coerce(value, elementType);
+        this.trace?.setItem(array, position);
         return { type: elementType, value: array.items[position] };
       },
       clear: () => {
         array.items[position] = null;
+        this.trace?.setItem(array, position);
       },
     };
   }
 
   private locateField(target: Member, env: Environment): Location | null {
-    const object = this.evalValue(target.object, env);
+    const object = this.evaluate(target.object, env);
     if (isError(object)) return null;
     if (!(object.value instanceof OakStruct)) {
       if (object.value === null && !isArrayType(object.type) && !isPrimitive(object.type)) {
@@ -589,18 +709,20 @@ class Interpreter {
       get: () => ({ type: field.type, value: struct.values.get(field.name) }),
       set: (value) => {
         struct.values.set(field.name, coerce(value, field.type));
+        this.trace?.setField(struct, field.name);
         return { type: field.type, value: struct.values.get(field.name) };
       },
       clear: () => {
         struct.values.set(field.name, null);
+        this.trace?.setField(struct, field.name);
       },
     };
   }
 
   /** Evaluates `a[i]` down to the array and the checked position; reports every way it can go wrong. */
   private resolveElement(target: Index, env: Environment): { array: OakArray; position: number } | null {
-    const base = this.evalValue(target.target, env);
-    const index = this.evalValue(target.index, env);
+    const base = this.evaluate(target.target, env);
+    const index = this.evaluate(target.index, env);
     if (isError(base) || isError(index)) return null;
     if (!isArrayType(base.type)) {
       this.semantic(target.target.span, `cannot index a value of type ${base.type}`);
@@ -624,13 +746,6 @@ class Interpreter {
   }
 
   // ---------- expressions ----------
-
-  /** Evaluates an expression that must produce a value (a void call is an error here). */
-  private evalValue(expression: Expression, env: Environment): Value {
-    const value = this.evaluate(expression, env);
-    if (value.type === "void") return this.semantic(expression.span, "this call returns no value");
-    return value;
-  }
 
   private evaluate(expression: Expression, env: Environment): Value {
     this.tick(expression.span);
@@ -660,8 +775,11 @@ class Interpreter {
         return this.evalTernary(expression, env);
       case "Assign":
         return this.evalAssign(expression, env);
-      case "Call":
-        return this.evalCall(expression, env);
+      case "Call": {
+        // Only a call can give back void, and void is not a value anywhere except in an expression statement.
+        const result = this.evalCall(expression, env);
+        return result.type === "void" ? this.semantic(expression.span, "this call returns no value") : result;
+      }
       case "Index": {
         const slot = this.resolveElement(expression, env);
         if (slot === null) return ERROR;
@@ -691,7 +809,7 @@ class Interpreter {
       this.tick(node.operand.span);
       return int(INT_MIN);
     }
-    const operand = this.evalValue(node.operand, env);
+    const operand = this.evaluate(node.operand, env);
     if (isError(operand)) return ERROR;
     if (node.op === "typeof") return { type: "string", value: operand.type };
     if (operand.value === null) return this.semantic(node.span, `cannot apply '${node.op}' to null`);
@@ -706,13 +824,13 @@ class Interpreter {
 
   private evalBinary(node: Binary, env: Environment): Value {
     if (node.op === "&&" || node.op === "||") return this.evalLogical(node, env);
-    const left = this.evalValue(node.left, env);
-    const right = this.evalValue(node.right, env);
+    const left = this.evaluate(node.left, env);
+    const right = this.evaluate(node.right, env);
     return this.binaryOp(node.op, left, right, node.span);
   }
 
   private evalLogical(node: Binary, env: Environment): Value {
-    const left = this.evalValue(node.left, env);
+    const left = this.evaluate(node.left, env);
     if (isError(left)) return ERROR;
     if (left.type !== "boolean" || left.value === null) {
       return this.semantic(node.left.span, `cannot apply '${node.op}' to ${left.value === null ? "null" : left.type}`);
@@ -720,7 +838,7 @@ class Interpreter {
     // Short circuit: the right side is not evaluated when the left side decides.
     if (node.op === "&&" && left.value === false) return boolean(false);
     if (node.op === "||" && left.value === true) return boolean(true);
-    const right = this.evalValue(node.right, env);
+    const right = this.evaluate(node.right, env);
     if (isError(right)) return ERROR;
     if (right.type !== "boolean" || right.value === null) {
       return this.semantic(node.right.span, `cannot apply '${node.op}' to ${right.value === null ? "null" : right.type}`);
@@ -790,13 +908,13 @@ class Interpreter {
   private evalTernary(node: Ternary, env: Environment): Value {
     const condition = this.evalCondition(node.condition, env);
     if (condition === null) return ERROR;
-    return this.evalValue(condition ? node.whenTrue : node.whenFalse, env);
+    return this.evaluate(condition ? node.whenTrue : node.whenFalse, env);
   }
 
   private evalAssign(node: Assign, env: Environment): Value {
     const location = this.locate(node.target, env);
     if (location === null) return ERROR;
-    let value = this.evalValue(node.value, env);
+    let value = this.evaluate(node.value, env);
     if (node.op !== "=") {
       const current = location.get();
       value = this.binaryOp(node.op === "+=" ? "+" : "-", current, value, node.span);
@@ -814,7 +932,7 @@ class Interpreter {
   }
 
   private evalMember(node: Member, env: Environment): Value {
-    const object = this.evalValue(node.object, env);
+    const object = this.evaluate(node.object, env);
     if (isError(object)) return ERROR;
     if (isArrayType(object.type)) {
       if (node.name !== "length") return this.semantic(node.nameSpan, `arrays have no member '${node.name}' (they have length, indexOf and join)`);
@@ -834,7 +952,7 @@ class Interpreter {
     if (!this.typeExists(node.elementType, env)) return this.semantic(node.span, `unknown type '${node.elementType}'`);
     const sizes: number[] = [];
     for (const sizeExpression of node.sizes) {
-      const size = this.evalValue(sizeExpression, env);
+      const size = this.evaluate(sizeExpression, env);
       if (isError(size)) return ERROR;
       if (size.type !== "int" || size.value === null) {
         return this.semantic(sizeExpression.span, `an array size must be an int, but it is ${size.type}`);
@@ -862,7 +980,7 @@ class Interpreter {
     const given = new Set<string>();
     for (const init of node.fields) {
       const field = entry.fields.find((f) => f.name === init.name);
-      const value = this.evalValue(init.value, env);
+      const value = this.evaluate(init.value, env);
       if (field === undefined) {
         this.semantic(init.nameSpan, `struct '${node.structName}' has no field '${init.name}'`);
         continue;
@@ -890,7 +1008,7 @@ class Interpreter {
 
     const name = node.callee.name;
     const entry = env.lookup(name);
-    const args = node.args.map((arg) => this.evalValue(arg, env));
+    const args = node.args.map((arg) => this.evaluate(arg, env));
 
     if (entry === undefined) {
       const builtin = BUILTINS.get(name);
@@ -914,6 +1032,7 @@ class Interpreter {
     if (args.some(isError)) return ERROR;
 
     const scope = new Environment(entry.closure, `function ${name}`);
+    const bindings: Binding[] = [];
     for (let i = 0; i < decl.params.length; i++) {
       const param = decl.params[i];
       const arg = args[i];
@@ -923,20 +1042,28 @@ class Interpreter {
       if (!isAssignable(arg.type, type)) {
         return this.semantic(node.args[i]?.span ?? node.span, `argument ${i + 1} of '${name}' must be ${type}, but it is ${arg.type}`);
       }
-      const declared = scope.declare({
+      const binding: Binding = {
         kind: "variable",
         name: param.name,
         type,
         value: coerce(arg, type),
         poisoned: false,
         declaredAt: param.nameSpan,
-      });
-      if (!declared) return this.semantic(param.nameSpan, `the parameter '${param.name}' is declared twice`);
+      };
+      if (!scope.declare(binding)) return this.semantic(param.nameSpan, `the parameter '${param.name}' is declared twice`);
+      bindings.push(binding);
+      this.addSymbol(param.name, isArrayType(type) ? "array" : "variable", type, scope, param.nameSpan);
     }
 
     this.depth++;
     if (this.depth > this.limits.maxDepth) {
       this.abort(node.span, `stack overflow: more than ${this.limits.maxDepth} calls nested inside each other`);
+    }
+    const site = this.trace?.currentSpan() ?? node.span;
+    if (this.trace !== null) {
+      this.trace.pushFrame(name);
+      this.trace.pushScope(scope, scope.label);
+      for (const binding of bindings) this.trace.declare(binding, true);
     }
     let completion: Completion;
     try {
@@ -945,6 +1072,14 @@ class Interpreter {
       this.depth--;
     }
 
+    const result = this.callResult(decl, completion, node);
+    this.trace?.endCall(site, result);
+    return result;
+  }
+
+  /** What a finished call gives back, after checking it against the declared return type. */
+  private callResult(decl: FuncDecl, completion: Completion, node: Call): Value {
+    const name = decl.name;
     const returnType = typeNameOf(decl.returnType);
     if (returnType === "void") {
       if (completion.kind === "return" && completion.value !== null && !isError(completion.value)) {
@@ -965,8 +1100,8 @@ class Interpreter {
 
   /** `array.indexOf(x)` and `array.join()`. */
   private evalMethod(node: Call, callee: Member, env: Environment): Value {
-    const object = this.evalValue(callee.object, env);
-    const args = node.args.map((arg) => this.evalValue(arg, env));
+    const object = this.evaluate(callee.object, env);
+    const args = node.args.map((arg) => this.evaluate(arg, env));
     if (isError(object) || args.some(isError)) return ERROR;
     if (!isArrayType(object.type)) {
       return this.semantic(callee.nameSpan, `a value of type ${object.type} has no method '${callee.name}'`);

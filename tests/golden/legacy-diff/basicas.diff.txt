@@ -1,0 +1,23 @@
+  ... 8 unchanged lines
+- Error: variable numero3 no declarada
+  ... 1 unchanged line
+- Error: variable numero4 no declarada
+  ... 17 unchanged lines
++ 16.0
+- 16
+  ... 6 unchanged lines
++ 5.0
+- 5
+  ... 7 unchanged lines
++ 55.0
+- 55
+  ... 1 unchanged line
++ 205.0
+- 205
+  ... 96 unchanged lines
+- Error de tipos: no se puede asignar string a int
+- Error: variable incorrectoNulo1 no declarada
+  ... 3 unchanged lines
+- Error de tipos: no se puede asignar int a incorrectoNulo2
+- Error: variable incorrectoNulo2 no declarada
+  ... 3 unchanged lines

@@ -1,0 +1,3 @@
+  ... 3 unchanged lines
+- Error: variable a ya declarada
+  ... 93 unchanged lines

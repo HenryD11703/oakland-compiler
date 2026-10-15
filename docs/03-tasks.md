@@ -1,6 +1,6 @@
 # 03 — Tasks
 
-> Status: **approved by Henry on 2026-10-15.** T01 to T11 done, T12 implemented. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
+> Status: **approved by Henry on 2026-10-15.** T01 to T15 done (Phase 1 complete); T12 implemented, its Worker part waits for T17. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
 > Estimates are in work sessions (one session = one sitting of focused work), honest and rough.
 
 ## Phase 0 — Safety net (1 session)
@@ -18,9 +18,9 @@
 - ✅ **T10 Functions.** Hoisting, arity and argument checks, return type, recursion depth. Covers: AC-13…15.
 - ✅ **T11 Arrays, matrices, structs, built-ins.** Includes `parseFloat` fix and `obtenerLongitudArray`. Covers: AC-16…18.
 - 🟡 **T12 Budgets.** *(Implemented and tested with T07–T11 because recursion needs the depth limit; the remaining check is Worker cancellation, in T17.)* Steps, time, depth, output. *Done when:* `while(true){}` ends with a diagnostic in < 5.5 s and output so far is kept. Covers: AC-24 (core part).
-- **T13 Trace recorder, symbols, AST view.** Events, checkpoints, caps; serialisable symbol table and AST. *Done when:* replaying diffs reproduces the exact state at any step in a property test. Covers: AC-29…31 (data).
-- **T14 `run()` + golden tests.** *Done when:* all samples match their golden output; every difference to `legacy/` is explained in `docs/language-changes.md`. Covers: AC-19, AC-22.
-- **T15 Fuzz + doc-test harnesses.** Covers: AC-23, AC-38 (LANGUAGE.md is executable).
+- ✅ **T13 Trace recorder, symbols, AST view.** Events, checkpoints, caps; serialisable symbol table and AST. *Done when:* replaying diffs reproduces the exact state at any step in a property test. Covers: AC-29…31 (data).
+- ✅ **T14 `run()` + golden tests.** *Done when:* all samples match their golden output; every difference to `legacy/` is explained in `docs/language-changes.md`. Covers: AC-19, AC-22.
+- ✅ **T15 Fuzz + doc-test harnesses.** Covers: AC-23, AC-38 (LANGUAGE.md is executable).
 
 **Gate:** I show Henry `docs/language-changes.md` (what now prints differently) before Phase 2.
 
@@ -43,8 +43,34 @@
 - **T29 Criterion → test table** complete at the bottom of this file; close the project sheet in `henry-b`.
 
 ## Criterion → test
-*(filled in as tasks close)*
+*(Phase 1 rows are filled; the interface rows are added as Phase 2 and 3 close.)*
 
 | AC | Test |
 |---|---|
-| — | — |
+| AC-01 int arithmetic | `interpreter-expressions` "int arithmetic is 32-bit" |
+| AC-02 float text | `interpreter-values` "float text", `interpreter-expressions` "float arithmetic" |
+| AC-03 division by zero | `interpreter-expressions` "division by zero" |
+| AC-04 strings and chars | `interpreter-expressions` "strings and characters" |
+| AC-05 short circuit | `interpreter-expressions` "logic" |
+| AC-06 `++` and `--` | `parser-statements`, `parser-errors` "++ and --", `interpreter-statements` "++ and --" |
+| AC-07 names with keywords | `lexer`, `parser-expressions`, `parser-statements`, `parser-errors` "reserved words" |
+| AC-08 `int n;` is null | `interpreter-statements` "declarations" |
+| AC-09 one mistake, one diagnostic | `interpreter-statements` "declarations", "assignment"; `interpreter-expressions` "type errors"; `interpreter-limits` "a flood of problems" |
+| AC-10 `var` and `typeof` | `interpreter-statements` "declarations", `interpreter-expressions` "typeof" |
+| AC-11 control flow | `interpreter-statements` "if", "loops", "switch" |
+| AC-12 misplaced break/continue/return | `interpreter-statements` "misplaced break, continue and return" |
+| AC-13 to AC-15 functions | `interpreter-functions` "functions", "function mistakes", "recursion depth" |
+| AC-16 built-ins | `interpreter-functions` "built-in functions" |
+| AC-17 arrays and matrices | `interpreter-arrays-structs` "arrays", "array mistakes" |
+| AC-18 structs | `parser-statements` "structs", `interpreter-arrays-structs` "structs" |
+| AC-19 the seven programs | `samples-run`, `golden` |
+| AC-20 diagnostics with position | `span`, `parser-errors`, every semantic test that checks a message |
+| AC-21 recovery, up to 10 | `parser-errors` "recovery" |
+| AC-22 semantic errors do not stop the run | `samples-run` (basicas.oak), `interpreter-statements` |
+| AC-23 never throws | `fuzz` (1,000 mutations, 500 soups), `interpreter-limits` "nothing a user types escapes" |
+| AC-24 limits (core) | `interpreter-limits` — Worker cancellation: T17 |
+| AC-29 AST view (data) | `symbols-ast` "syntax tree view" |
+| AC-30 symbols | `symbols-ast` "symbol table", "symbols of code that never runs" |
+| AC-31 trace (data) | `trace` (steps, scopes, calls, heap, truncation, replay in any order) |
+| AC-38 executable reference | `language-doc` (every example in `docs/LANGUAGE.md`) |
+| AC-25, AC-26 to AC-28, AC-32 to AC-39 | *(interface, quality and delivery: Phases 2 and 3)* |

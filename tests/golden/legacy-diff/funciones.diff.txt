@@ -1,0 +1,18 @@
+  ... 31 unchanged lines
+- Error: parseInt recibe un argumento de tipo string que sea un número
+- Error de tipos: no se puede asignar null a int
+- Error: parseInt recibe un argumento de tipo string
+- Error de tipos: no se puede asignar null a int
+  ... 4 unchanged lines
++ 10.0
+- 10
+  ... 1 unchanged line
+- Error: parseFloat recibe un argumento de tipo string que sea un número
+- Error de tipos: no se puede asignar null a float
+  ... 8 unchanged lines
+- Error: toLowerCase recibe un argumento de tipo string
+- Error de tipos: no se puede asignar null a string
+  ... 3 unchanged lines
+- Error: toUpperCase recibe un argumento de tipo string
+- Error de tipos: no se puede asignar null a string
+  ... 8 unchanged lines

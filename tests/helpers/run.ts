@@ -3,7 +3,7 @@ import type { RunLimits } from "../../src/core/interpreter/limits";
 import { run, type RunResult } from "../../src/core/run";
 
 export function runOak(source: string, limits: Partial<RunLimits> = {}): RunResult {
-  return run(source, limits);
+  return run(source, { limits });
 }
 
 /** Runs a program that must have no diagnostics and returns what it printed (without the final newline). */

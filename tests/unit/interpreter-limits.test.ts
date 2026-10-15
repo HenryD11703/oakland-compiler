@@ -31,7 +31,7 @@ describe("limits (AC-24, core part)", () => {
   it("stops on the time limit using the clock it is given", () => {
     const program = parse("while (true) { }").program;
     let time = 0;
-    const result = interpret(program, { maxSteps: Number.MAX_SAFE_INTEGER, maxTimeMs: 5000 }, () => (time += 1000));
+    const result = interpret(program, { limits: { maxSteps: Number.MAX_SAFE_INTEGER, maxTimeMs: 5000 }, now: () => (time += 1000) });
     expect(result.stoppedEarly).toBe(true);
     expect(result.diagnostics[0]?.message).toContain("time limit reached (5 s)");
   });
@@ -53,7 +53,7 @@ describe("limits (AC-24, core part)", () => {
     expect(DEFAULT_LIMITS).toEqual({
       maxSteps: 20_000_000,
       maxTimeMs: 5_000,
-      maxDepth: 1_000,
+      maxDepth: 400,
       maxOutputChars: 200_000,
       maxArrayElements: 1_000_000,
     });
@@ -116,5 +116,28 @@ describe("nothing a user types escapes as an exception (principle 2)", () => {
   it("copes with a very long chain of operators", () => {
     const chain = Array.from({ length: 5000 }, () => "1").join(" + ");
     expect(runOak(`System.out.println(${chain});`).stdout).toBe("5000\n");
+  });
+});
+
+describe("a flood of problems", () => {
+  it("lists the same mistake once, however many times a loop repeats it", () => {
+    const result = runOak("for (int i = 0; i < 5000; i++) { System.out.println(nope); }");
+    expect(result.diagnostics.map((d) => d.message)).toEqual(["variable 'nope' is not declared"]);
+    expect(result.stdout.split("\n").length).toBe(5001);
+  });
+
+  it("lists mistakes at different places separately", () => {
+    const result = runOak("System.out.println(a);\nSystem.out.println(a);");
+    expect(result.diagnostics).toHaveLength(2);
+  });
+
+  it("stops listing after a maximum and says so once", async () => {
+    const { MAX_DIAGNOSTICS } = await import("../../src/core/interpreter/limits");
+    const source = Array.from({ length: MAX_DIAGNOSTICS + 50 }, () => "System.out.println(nope);").join("\n");
+    const result = runOak(source);
+    expect(result.diagnostics).toHaveLength(MAX_DIAGNOSTICS + 1);
+    expect(result.diagnostics.at(-1)?.message).toBe(`more than ${MAX_DIAGNOSTICS} problems: the rest are not listed`);
+    expect(result.stoppedEarly).toBe(false);
+    expect(result.stdout.split("\n").length).toBe(MAX_DIAGNOSTICS + 51);
   });
 });
