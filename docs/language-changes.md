@@ -2,7 +2,7 @@
 
 Everything here is a difference between OakLand as the original interpreter (commit `11b0e46`) accepted it and the rebuilt one. Each entry says what changed and why. The seven programs in `tests/fixtures/prueba/` are the regression suite; the original output of each is in `tests/golden/legacy/`.
 
-> Status: **parser part only (T03–T06).** The runtime part (what the programs print) is added when the interpreter is rebuilt (T14). All seven programs already parse with no diagnostics.
+> Status: **parser (T03–T06) and interpreter (T07–T11) written.** All seven programs parse and run. The four that end with a hand-written "SALIDA ESPERADA" block now print what that block says (`tests/unit/samples-run.test.ts`), ignoring only blank lines, repeated spaces, the quotes the author wrote around some text results, and one line where the author pasted source code instead of output. The final table "program → what changed in its output" is completed in T14.
 
 ## Syntax
 
@@ -23,3 +23,31 @@ Everything here is a difference between OakLand as the original interpreter (com
 ## Diagnostics
 - Syntax and lexical problems now carry a position, a plain-English message and a phase, and up to 10 are reported per run (the original stopped at the first one and showed a list of every token it might have accepted).
 - If there is any lexical or syntax error the program does not run (the original also refused, with an exception shown as "Error fatal").
+
+## What programs print (runtime)
+
+| Change | Why |
+|---|---|
+| **Floats print like Java:** `10.5 + 5.5` prints `16.0`, `5.0` stays `5.0`, `1.0E7` for large ones. The original printed `16`. | The course sample's own expected output says `16.0` (AC-02). |
+| **Integer division and 32-bit ints:** `7 / 2` is `3`, `-7 / 2` is `-3`, `2147483647 + 1` is `-2147483648`, `100000 * 100000` is `1410065408`. The original gave `3.5`, `-3.5` and numbers beyond 32 bits. A literal above 2147483647 is an error. | Java-like semantics, approved by Henry (AC-01). |
+| **`int x;` holds `null` with no error.** The original reported "variable not declared" and then printed `null`. | The sample's expected output says `null`; it is not a mistake (AC-08). |
+| **One mistake, one diagnostic.** A failed declaration (`int a = "Hola";`) or assignment leaves the variable null, as the course sample expects, but reports once. The original reported two or three (the real error, then "variable not declared", per later use). | AC-09. |
+| **Errors are not mixed into the output.** The original appended "Error: ..." lines to what the program printed. Now the output is only the program's, and problems are diagnostics with a position. | Principle 3. |
+| **Widening works on assignment:** `float f = 1.5; f = 2;` is fine (the original rejected it). Narrowing (`int i = 3.5`, `i += 1.5`) is still an error. `char` converts to `int` and `float`. | Java-like. |
+| **Strings:** `"n=" + 1`, `"b=" + true`, `"c=" + 'x'` concatenate (the original rejected them); `"a" < "b"` compares (it used to say it cannot compare a string with a string). | Java-like (AC-04). |
+| **`char` is a number in arithmetic:** `'a' + 1` is `98`. | Java-like. |
+| **`5.5 % 2` works** (`1.5`); the original rejected it. | Java-like. |
+| **`&&` and `||` short-circuit.** | AC-05. |
+| **Functions can be called before their declaration;** arguments are counted and type-checked (`f(1)` for two parameters, `f("a")` for an int); a wrong return type, a missing return, a value returned from a void function, and using a void call as a value are diagnostics. The original crashed or silently accepted most of these. | AC-13 to AC-15. |
+| **`switch` runs `default` when no case matches.** The original ran it only after falling through from a matching case. | Java-like; the original was a bug. |
+| **Nested arrays print as `[[1, 2], [3, 4]]`** (the original printed `[, ]`). `for (var row : matrix)` works. An out-of-range index says which index and the length. | Fixes. |
+| **Both `parsefloat` (the course's spelling) and `parseFloat` (the README's) work.** | The original only registered the first; the README documented the second. |
+| **`typeof x` for `int x;` is `int`** (the original failed). **`x == null`** works. | Fixes. |
+| **Limits:** at most 20,000,000 steps, 5 s, 1,000 nested calls, 200,000 characters of output and 1,000,000 array elements per array. A runaway program ends with a diagnostic and keeps its output; the original froze the page. Very deep recursion that exhausts the JavaScript stack first is reported as a stack overflow too. | AC-24. |
+
+### Unchanged on purpose
+- `System.out.println(a, b)` separates arguments with one space.
+- `int[] b = a;` **copies** the array (the sample says "por copia"); `b = a;` and passing an array to a function **share** it.
+- `ternary` takes the type of the branch it chooses (`true ? 1 : 2.5` is the int `1`).
+- `time()` returns an ISO date-time string.
+- Variables, functions and structs share one namespace per scope; a redeclared name keeps the first.

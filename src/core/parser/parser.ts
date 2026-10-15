@@ -27,6 +27,9 @@ import type {
 /** The parser reports at most this many syntax errors per run (AC-21). */
 export const MAX_SYNTAX_ERRORS = 10;
 
+/** Blocks and parentheses may nest this deep; deeper input is rejected instead of exhausting the stack. */
+export const MAX_NESTING = 150;
+
 export interface ParseResult {
   readonly program: Program;
   /** Lexical and syntax problems, sorted by position. If it is not empty the program must not run. */
@@ -84,6 +87,7 @@ class Parser {
   private readonly syntaxDiagnostics: Diagnostic[] = [];
   private readonly structNames = new Set<string>();
   private stopped = false;
+  private nesting = 0;
   truncated = false;
 
   constructor(private readonly tokens: readonly Token[]) {
@@ -132,6 +136,19 @@ class Parser {
   }
 
   // ---------- errors ----------
+
+  /** Runs `parse` one level deeper; refuses to go past MAX_NESTING. */
+  private nested<T>(parse: () => T): T {
+    if (this.nesting >= MAX_NESTING) {
+      this.failAt(this.peek().span, `this is nested too deeply (more than ${MAX_NESTING} levels of blocks or parentheses)`);
+    }
+    this.nesting++;
+    try {
+      return parse();
+    } finally {
+      this.nesting--;
+    }
+  }
 
   private failAt(span: Span, message: string): never {
     throw new SyntaxFailure(diagnostic("syntax", message, span));
@@ -366,6 +383,10 @@ class Parser {
   }
 
   private parseStatement(): Statement {
+    return this.nested(() => this.parseStatementUnguarded());
+  }
+
+  private parseStatementUnguarded(): Statement {
     const token = this.peek();
     if (isPunct(token, "{")) return this.parseBlock();
 
@@ -599,7 +620,7 @@ class Parser {
   // ---------- expressions ----------
 
   private parseExpression(): Expression {
-    return this.parseAssignment();
+    return this.nested(() => this.parseAssignment());
   }
 
   private parseAssignment(): Expression {

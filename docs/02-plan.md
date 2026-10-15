@@ -51,7 +51,7 @@ Each step records `{stmtSpan, frame, changes[], outputLen}`. The UI rebuilds the
 Rejected: *live stepping with an async interpreter* (every `await` slows the normal run ~10× and complicates every visit function); *full snapshot per step* (memory grows with variables × steps).
 
 **D6 — Off-thread execution: one Web Worker per run, Stop = `worker.terminate()` plus a fresh worker for the next run.**
-The step and time budgets live inside the interpreter (they produce a clean diagnostic and keep the output); `terminate()` is the backstop if the interpreter itself ever hangs. Budgets: 2M steps, 5 s, depth 1,000, 200 KB output, 20k trace steps.
+The step and time budgets live inside the interpreter (they produce a clean diagnostic and keep the output); `terminate()` is the backstop if the interpreter itself ever hangs. Budgets: 20M steps, 5 s, depth 1,000, 200,000 characters of output, 20k trace steps.
 Rejected: *main thread with chunked yielding* (complexity, jank); *server-side execution* (breaks principle 9, needs hosting).
 
 **D7 — Editor: CodeMirror 6 with a `StreamLanguage` built on our lexer, `@codemirror/lint` for squiggles, decorations for the current step. [Henry?]**

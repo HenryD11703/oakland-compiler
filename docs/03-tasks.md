@@ -1,6 +1,6 @@
 # 03 — Tasks
 
-> Status: **approved by Henry on 2026-10-15.** T01 to T06 done. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
+> Status: **approved by Henry on 2026-10-15.** T01 to T11 done, T12 implemented. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
 > Estimates are in work sessions (one session = one sitting of focused work), honest and rough.
 
 ## Phase 0 — Safety net (1 session)
@@ -12,12 +12,12 @@
 - ✅ **T04 Grammar + lexer.** Write `grammar.ebnf`, then the lexer (keywords vs names, escapes, both comment styles, positions). *Done when:* all samples tokenise; `trueValue` is one name token. Covers: AC-07.
 - ✅ **T05 Parser: expressions.** Pratt parser, precedence from the original, ternary, assignment ops, calls, indexing, `.length/.indexOf/.join`. *Done when:* a table of 60+ expression cases passes, including the diamond's arithmetic.
 - ✅ **T06 Parser: statements and declarations.** Variables, arrays, matrices, `if/while/for/foreach/switch`, functions, `++/--`, structs, member access, recovery. *Done when:* all samples parse; a broken-syntax corpus gives positioned, readable errors, up to 10 per run. Covers: AC-06, AC-18 (syntax), AC-20, AC-21.
-- **T07 Values, types, environments.** Types, typed values, scopes, poison value. *Done when:* unit tests for scope lookup and shadowing.
-- **T08 Interpreter: expressions.** Int/float/string/char/boolean semantics, short-circuit, division by zero. *Done when:* AC-01…05 pass. Covers: AC-01…05.
-- **T09 Interpreter: statements and control flow.** Declarations (incl. `int n;` → null), assignment, blocks, loops, `switch`, completions, misplaced `break/continue/return` diagnostics. Covers: AC-08…12.
-- **T10 Functions.** Hoisting, arity and argument checks, return type, recursion depth. Covers: AC-13…15.
-- **T11 Arrays, matrices, structs, built-ins.** Includes `parseFloat` fix and `obtenerLongitudArray`. Covers: AC-16…18.
-- **T12 Budgets.** Steps, time, depth, output. *Done when:* `while(true){}` ends with a diagnostic in < 5.5 s and output so far is kept. Covers: AC-24 (core part).
+- ✅ **T07 Values, types, environments.** Types, typed values, scopes, poison value. *Done when:* unit tests for scope lookup and shadowing.
+- ✅ **T08 Interpreter: expressions.** Int/float/string/char/boolean semantics, short-circuit, division by zero. *Done when:* AC-01…05 pass. Covers: AC-01…05.
+- ✅ **T09 Interpreter: statements and control flow.** Declarations (incl. `int n;` → null), assignment, blocks, loops, `switch`, completions, misplaced `break/continue/return` diagnostics. Covers: AC-08…12.
+- ✅ **T10 Functions.** Hoisting, arity and argument checks, return type, recursion depth. Covers: AC-13…15.
+- ✅ **T11 Arrays, matrices, structs, built-ins.** Includes `parseFloat` fix and `obtenerLongitudArray`. Covers: AC-16…18.
+- 🟡 **T12 Budgets.** *(Implemented and tested with T07–T11 because recursion needs the depth limit; the remaining check is Worker cancellation, in T17.)* Steps, time, depth, output. *Done when:* `while(true){}` ends with a diagnostic in < 5.5 s and output so far is kept. Covers: AC-24 (core part).
 - **T13 Trace recorder, symbols, AST view.** Events, checkpoints, caps; serialisable symbol table and AST. *Done when:* replaying diffs reproduces the exact state at any step in a property test. Covers: AC-29…31 (data).
 - **T14 `run()` + golden tests.** *Done when:* all samples match their golden output; every difference to `legacy/` is explained in `docs/language-changes.md`. Covers: AC-19, AC-22.
 - **T15 Fuzz + doc-test harnesses.** Covers: AC-23, AC-38 (LANGUAGE.md is executable).

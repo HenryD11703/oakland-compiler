@@ -46,7 +46,7 @@ Syntax is unchanged from the original except where stated. The full reference li
 - **AC-13** Functions can be called before the line where they are declared.
 - **AC-14** A call to an unknown function, with the wrong number of arguments, or with an argument of the wrong type is a diagnostic naming the function and what was expected.
 - **AC-15** The returned value must match the declared type; a non-`void` function that ends without `return` is a diagnostic. Recursion deeper than the call-depth limit is a diagnostic (`stack overflow`), not a host exception.
-- **AC-16** Built-ins work as documented, all of them: `System.out.println(a, b, ...)`, `parseInt` (truncates), `parseFloat`, `toString`, `toLowerCase`, `toUpperCase`, `typeof`, `time()`, `obtenerLongitudArray(array)`; and array members `.length`, `.indexOf(x)`, `.join()`.
+- **AC-16** Built-ins work as documented, all of them: `System.out.println(a, b, ...)`, `parseInt` (truncates), `parseFloat` (and `parsefloat`, the spelling the course sample uses), `toString`, `toLowerCase`, `toUpperCase`, `typeof`, `time()`, `obtenerLongitudArray(array)`; and array members `.length`, `.indexOf(x)`, `.join()`.
 
 ### Arrays, matrices, structs
 - **AC-17** Arrays and matrices of any depth (`int[] a = {1,2}`, `new int[5]`, `int[][] m = new int[2][3]`, copy from another array) behave as in the original. An out-of-range index is a diagnostic that states the index and the length.
@@ -74,7 +74,7 @@ Syntax is unchanged from the original except where stated. The full reference li
 
 ## Execution safety
 
-- **AC-24** Runs happen in a Web Worker. Defaults: 2,000,000 evaluation steps, 5 seconds, call depth 1,000, 200 KB of output. Reaching a limit stops the run with a diagnostic on the offending statement and keeps the output produced so far.
+- **AC-24** Runs happen in a Web Worker. Defaults: 20,000,000 evaluation steps (measured: about 2 million steps take 0.1-0.3 s, so 2 million was far below what 5 s allows), 5 seconds, up to 1,000 nested calls (fewer if each call nests deeply: the JavaScript stack gives out first, and that is reported too), 200,000 characters of output. Reaching a limit stops the run with a diagnostic on the offending statement and keeps the output produced so far.
 - **AC-25** A Stop button cancels a running program within 500 ms, and the page stays responsive during the run (a `while (true) {}` can be started and stopped).
 
 ## The views
