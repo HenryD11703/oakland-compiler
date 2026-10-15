@@ -1,6 +1,6 @@
 # 01 — Spec
 
-> Status: **draft for approval.** Items marked **[Henry?]** are my proposals where nothing was decided yet; they need a yes/no at the approval gate.
+> Status: **approved by Henry on 2026-10-15** (including the six proposals marked [Henry?]; the spec says "draft" no more). Items marked **[Henry?]** are my proposals where nothing was decided yet; they need a yes/no at the approval gate.
 
 ## What it is
 

@@ -1,1 +1,8 @@
-tool.js
+node_modules
+dist
+test-results
+playwright-report
+*.tsbuildinfo
+.env
+.env.*
+!.env.example

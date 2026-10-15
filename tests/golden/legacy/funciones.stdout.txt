@@ -1,0 +1,65 @@
+********** Funciones no recursivas sin parámetros **********
+1. void
+Hola
+
+2. Con retorno
+30
+********** Funciones no recursivas con parámetros **********
+1. void
+Hola mundo
+
+2. Con retorno
+30
+********** Funciones recursivas **********
+1. Factorial
+120
+
+2. Fibonacci
+55
+
+3. Hanoi
+Mover disco 1 de  A  a  C
+Mover disco  2  de  A  a  B
+Mover disco 1 de  C  a  B
+Mover disco  3  de  A  a  C
+Mover disco 1 de  B  a  A
+Mover disco  2  de  B  a  C
+Mover disco 1 de  A  a  C
+********** Función definida dentro de bloque **********
+40
+********** Funciones embebidas **********
+1. parseInt
+Error: parseInt recibe un argumento de tipo string que sea un número
+Error de tipos: no se puede asignar null a int
+Error: parseInt recibe un argumento de tipo string
+Error de tipos: no se puede asignar null a int
+10
+10
+
+2. parsefloat
+10
+10.5
+Error: parseFloat recibe un argumento de tipo string que sea un número
+Error de tipos: no se puede asignar null a float
+
+3. toString
+10
+10.510
+php es el mejor lenguaje: false
+
+4. toLowerCase
+hola mundo
+Error: toLowerCase recibe un argumento de tipo string
+Error de tipos: no se puede asignar null a string
+
+5. toUpperCase
+HOLA MUNDO
+Error: toUpperCase recibe un argumento de tipo string
+Error de tipos: no se puede asignar null a string
+
+6. typeof
+int
+float
+string
+char
+boolean

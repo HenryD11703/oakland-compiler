@@ -1,0 +1,14 @@
+Global entero: 100
+Local entero: 50
+Global cadena: Global
+Local cadena: Local
+Condición es verdadera en Bloque 1
+Resultado de concatenación en Bloque 1: HolaLocal
+Número en bloque 2: 10
+Número en bloque 2: 20
+Número en bloque 2: 30
+Global entero sombreado en Bloque 2: 200
+Local cadena en Bloque 2: Bloque 2
+Resultado de concatenación en Bloque 2: AdiósGlobal
+Global entero modificado: 150
+El valor del globalEntero es mayor a 150

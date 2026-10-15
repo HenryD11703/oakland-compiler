@@ -1,0 +1,14 @@
+Global entero: 100
+Local entero: 50
+Global cadena: Global
+Local cadena: Local
+Condición es verdadera en Bloque 1
+Resultado de concatenación en Bloque 1: Hola Local
+Número en bloque 2: 10
+Número en bloque 2: 20
+Número en bloque 2: 30
+Global entero sombreado en Bloque 2: 200
+Local cadena en Bloque 2: Bloque 2
+Resultado de concatenación en Bloque 2: Adiós Global
+Global entero modificado: 150
+Fecha actual: 2024-09-20T12:00:00.000Z

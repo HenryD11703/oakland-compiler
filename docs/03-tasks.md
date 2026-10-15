@@ -1,11 +1,11 @@
 # 03 — Tasks
 
-> Status: **draft for approval.** Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
+> Status: **approved by Henry on 2026-10-15.** T01 and T02 done. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
 > Estimates are in work sessions (one session = one sitting of focused work), honest and rough.
 
 ## Phase 0 — Safety net (1 session)
-- **T01 Scaffold.** Vite + React + TS strict, ESLint, Vitest, Playwright, `npm run check`. *Done when:* `npm ci && npm run check` passes on an empty app. Covers: AC-36 (partly).
-- **T02 Characterise the original.** Run the original interpreter on every `Prueba/` program and store stdout + diagnostics as `tests/golden/legacy/*`. *Done when:* the files exist, are committed, and a script regenerates them from commit `11b0e46`. Covers: AC-19.
+- ✅ **T01 Scaffold.** Vite + React + TS strict, ESLint, Vitest, Playwright, `npm run check`. *Done when:* `npm ci && npm run check` passes on an empty app. Covers: AC-36 (partly).
+- ✅ **T02 Characterise the original.** Run the original interpreter on every `Prueba/` program and store stdout + diagnostics as `tests/golden/legacy/*`. *Done when:* the files exist, are committed, and a script regenerates them from commit `11b0e46`. Covers: AC-19.
 
 ## Phase 1 — Core (3–4 sessions)
 - **T03 Spans, diagnostics, tokens.** *Done when:* types exist with unit tests for line/column math. Covers: AC-20.

@@ -1,0 +1,41 @@
+{
+  "source": "funciones.oak",
+  "hostError": null,
+  "diagnostics": [
+    {
+      "numero": 1,
+      "descripcion": "Error de tipos: no se puede asignar null a int",
+      "linea": 116,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 2,
+      "descripcion": "Error de tipos: no se puede asignar null a int",
+      "linea": 117,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 3,
+      "descripcion": "Error de tipos: no se puede asignar null a float",
+      "linea": 129,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 4,
+      "descripcion": "Error de tipos: no se puede asignar null a string",
+      "linea": 143,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 5,
+      "descripcion": "Error de tipos: no se puede asignar null a string",
+      "linea": 151,
+      "columna": 1,
+      "tipo": "Semantico"
+    }
+  ]
+}

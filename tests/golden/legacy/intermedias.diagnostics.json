@@ -1,0 +1,13 @@
+{
+  "source": "intermedias.oak",
+  "hostError": null,
+  "diagnostics": [
+    {
+      "numero": 1,
+      "descripcion": "Error: variable a ya declarada",
+      "linea": 12,
+      "columna": 1,
+      "tipo": "Semantico"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # 02 — Technical plan
 
-> Status: **draft for approval.** Each decision lists what was rejected and why. Decisions marked **[Henry?]** change cost or look of the result.
+> Status: **approved by Henry on 2026-10-15** (including the six proposals marked [Henry?]; the spec says "draft" no more). Each decision lists what was rejected and why. Decisions marked **[Henry?]** change cost or look of the result.
 
 ## Shape of the code
 

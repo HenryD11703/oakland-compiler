@@ -1,0 +1,151 @@
+********** Declaracion de variables **********
+1. Declaracion con tipo y valor
+10
+20.5
+Hola mundo
+a
+
+2. Declaracion con tipo y sin valor
+Error: variable numero3 no declarada
+null
+Error: variable numero4 no declarada
+null
+
+3. Declaracion infiriendo el tipo
+10
+20.5
+Hola mundo
+a
+
+********** Asignacion de variables **********
+20
+30.5
+Adios mundo
+b
+
+********** Operaciones aritmeticas **********
+1. Suma
+15
+16
+15.5
+15.5
+30.5
+
+2. Resta
+5
+5
+4.5
+5.5
+-10.5
+
+3. Multiplicacion
+50
+57.75
+55
+52.5
+205
+
+4. Division
+2
+1.9090909090909092
+1.8181818181818181
+2.1
+0.4878048780487805
+
+5. Modulo
+0
+1
+
+6. Resta unaria
+-10
+-10.5
+
+7. Compuesta
+9
+
+********** Operaciones Relacionales **********
+1. Igualdad
+true
+false
+true
+false
+false
+
+2. Diferencia
+false
+true
+false
+true
+true
+
+3. Mayor que
+true
+false
+true
+false
+false
+
+4. Menor que
+false
+false
+false
+false
+true
+
+5. Mayor o igual que
+true
+true
+true
+true
+false
+
+6. Menor o igual que
+false
+true
+false
+true
+true
+
+********** Operaciones Logicas **********
+1. AND
+true
+false
+false
+false
+true
+false
+
+2. OR
+true
+true
+true
+false
+true
+true
+false
+
+3. NOT
+false
+true
+false
+true
+
+********** System.out.println **********
+10.123
+hola
+ mundo
+hola 10
+true
+false
+
+********** Manejo del valor nulo **********
+1 Declaracion con tipo y valor incorrecto
+Error de tipos: no se puede asignar string a int
+Error: variable incorrectoNulo1 no declarada
+null
+
+2. Asignacion con tipo incorrecto
+Error de tipos: no se puede asignar int a incorrectoNulo2
+Error: variable incorrectoNulo2 no declarada
+null
+

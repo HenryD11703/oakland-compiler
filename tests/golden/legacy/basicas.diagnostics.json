@@ -1,0 +1,48 @@
+{
+  "source": "basicas.oak",
+  "hostError": null,
+  "diagnostics": [
+    {
+      "numero": 1,
+      "descripcion": "Error: variable numero3 no declarada",
+      "linea": 25,
+      "columna": 20,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 2,
+      "descripcion": "Error: variable numero4 no declarada",
+      "linea": 26,
+      "columna": 20,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 3,
+      "descripcion": "Error de tipos: no se puede asignar string a int",
+      "linea": 206,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 4,
+      "descripcion": "Error: variable incorrectoNulo1 no declarada",
+      "linea": 207,
+      "columna": 20,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 5,
+      "descripcion": "Error de tipos: no se puede asignar int a incorrectoNulo2",
+      "linea": 212,
+      "columna": 1,
+      "tipo": "Semantico"
+    },
+    {
+      "numero": 6,
+      "descripcion": "Error: variable incorrectoNulo2 no declarada",
+      "linea": 213,
+      "columna": 20,
+      "tipo": "Semantico"
+    }
+  ]
+}
