@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "npm run lint && npm run typecheck && npm test",
-    "capture-legacy": "node scripts/capture-legacy.mjs"
+    "capture-legacy": "node scripts/capture-legacy.mjs",
+    "screenshots": "node scripts/readme-screenshots.mjs"
   },
   "engines": {
     "node": ">=20.19.0"

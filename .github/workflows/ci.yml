@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint, types and unit tests
+        run: npm run check
+
+      - name: Build
+        run: npm run build
+
+      - name: Dependency audit (production)
+        run: npm audit --omit=dev
+
+      - name: Install the browser for the end-to-end tests
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end tests (desktop and phone, with axe)
+        run: npm run test:e2e
+
+      - name: Keep the Playwright report when a test fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

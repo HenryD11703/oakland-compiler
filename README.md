@@ -1,146 +1,86 @@
+# OakLand
 
-# Guia de uso de OakLand
+**A small Java-like language, and an interpreter you can watch run.**
 
-[Link del Interprete](https://henryd11703.github.io/OLC2_Proyecto1_202004071/)
+Write a program, press Run, then drag through its execution: the line being run, every variable, the call stack, the output so far and the syntax tree, at any of up to 20,000 recorded steps. Everything runs in your browser; nothing is sent anywhere.
 
-[Manual Tecnico](/Reportes/ManualTecnico.md)
+**Live:** <https://henryd11703.github.io/OLC2_Proyecto1_202004071/>
 
-[Gramatica](/Reportes/gramatica.txt)
+![The playground midway through a run: source with values at the ends of lines, variables, output, and a timeline of the whole run](docs/images/playground.png)
 
-### Descripcion General
+OakLand began as a university project for the compilers course (OLC2, USAC): an interpreter with a Peggy-generated parser and a Monaco editor. This version is a rebuild: a hand-written lexer and parser, a tree-walking interpreter with Java-like semantics, a recorded trace, and an interface made to explain what a program does.
 
-OakLand es un lenguaje de programación inspirado en la sintaxis de Java. Es un lenguaje multiparadigma que soporta tanto la programación procedimental como la programación funcional. Este manual describe las características clave del lenguaje OakLand, proporcionando detalles sobre la sintaxis, las operaciones soportadas, la estructura, entre otros aspectos.
+## What you can do
 
-![Interprete](./Reportes/image.png)
+- **Step through a run.** The timeline at the bottom is drawn from the whole trace: the line that was running, which conditions held, what had been printed, and the values of the numeric variables that change most. Drag it, or use the arrow keys (`Shift` for 100 steps, `Home`/`End`).
+- **See the call stack.** Recursion shows one frame per call, with the variables of each; the line that made a call is marked again when the call returns.
+- **See values next to the code.** Each line that assigns a variable shows its current value at the end of the line.
+- **Read mistakes, not stack traces.** Every problem (syntax, types, names, arguments, bounds, division by zero, runaway loops) is a message with a line and column, underlined in the editor and listed under *Problems*. A bad program never crashes the page.
+- **Look inside.** *Syntax tree* shows how the interpreter parsed the program, *Symbols* lists every name it declares; clicking either jumps to the source.
+- **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Structs, Heart, Mistakes), open a `.oak` file, or save yours.
 
-## Caracteristicas Clave
-- **Sintaxis:** OakLand brinda una sintaxis simple de utilizar
-- **Tipos Staticos:** Las variables en OakLand tienen un tipo fijo cuando se asignan
-- **Arrays y Matrices:** Oakland cuenta con Arrays y Matrices multidimensionales
-- **Funciones:** OakLand cuenta con funciones que el usuario puede crear y con funciones nativas del lenguaje
+| Mistakes with their positions | A recursive call stack | On a phone (375 px) |
+|---|---|---|
+| ![](docs/images/mistakes.png) | ![](docs/images/call-stack.png) | ![](docs/images/phone-code.png) |
 
-## Estructura del lenguaje
-### Tipos de Datos
-1. Datos Primitivos
-1.1 `int` Para datos numericos enteros
-1.2 `float` Para datos numericos decimales
-1.3 `string`Para cadenas de texto
-1.4 `boolean`Para datos de tipo logico, como `true`o `false`
+## The language
 
-2. Datos de tipo compuesto
-2.1 `array` un vector de datos de cierto tipo
-2.2 `matriz`  un vector especifico que puede contener `n` cantidad de vectores dentro 
+Static types (`int`, `float`, `string`, `boolean`, `char`, arrays and matrices of any depth, structs), functions with recursion, `if`/`while`/`for`/for-each/`switch`. `int` is 32-bit, floats print like Java, and strings join with anything.
 
-### Ejemplos: 
-```javascript
-int num = 10;
-float decimal = 5.5;
-string text = "Hello, World";
-boolean isValid = true;
-char letter = 'A';
-```
-Las variables tambien se pueden declarar sin especificar un tipo, el lenguaje es capaz de reconocer el tipo de la variable que se esta creando
+```java
+struct Person { string name; int age; }
 
-```javascript
-var inferredType = 10;
-```
-
-3. Estructuras de control
-
-3.1 If else
-
-```javascript
-if (condition) {
-   // Ejecuta este bloque si la condicion es verdadera
-} else {
-   // Ejecuta este bloque si la condicion es falsa
-}
-```
-
-3.2 Switch - Case
-
-```javascript
-switch (variable) {
-   case value1:
-      // si case uno se cumple
-      break;
-   case value2:
-      // si case dos se cumple
-      break;
-   default:
-      // si ninguno se cumple
+int factorial(int n) {
+    if (n == 0) { return 1; }
+    return n * factorial(n - 1);
 }
 
-```
-3.3 Blucles
-
-```javascript
-while (condition) {
-    // Repite este bloque siempre que se cumpla la condicion
-}
-
-for (int i = 0; i < 10; i+=1) {
-   // Repite este bloque siempre que se cumpla la condicion
-   // Tener en cuenta que la forma de hacer el incremento es con +=
-}
+Person ana = Person{name: "Ana", age: 20};
+ana.age++;
+System.out.println(ana.name, "is", ana.age, "and 5! is", factorial(5));
 ```
 
-4. Arrays y matrices
+The full reference is [`docs/LANGUAGE.md`](docs/LANGUAGE.md). **Every example in it is run by the test suite**, so it cannot drift from the interpreter. The grammar is [`docs/grammar.ebnf`](docs/grammar.ebnf), and what changed from the original course interpreter, line by line, is [`docs/language-changes.md`](docs/language-changes.md).
 
-4.1 Arrays
+## Run it yourself
 
-```javascript
-int[] numbers = {1, 2, 3, 4, 5};
-int[] numbers = new int[5]; 
-```
-4.2 Matrices
-
-```javascript
-int[][] matrix = new int[3][3];  
-matrix[0][0] = 1;
-
+```bash
+npm ci
+npm run dev        # http://localhost:5173
+npm run check      # lint + types + unit tests
+npm run test:e2e   # builds, serves and tests the page in Chromium (desktop and phone, with axe)
+npm run build
 ```
 
-5. Funciones
-5.1 Declaracion
+Node 20.19 or newer. Nothing else: no backend, no Docker, no environment variables.
 
-```javascript
-int add(int a, int b) {
-   return a + b;
-}
+## How it is built
 
 ```
-
-5.2 Llamada de funciones
-```javascript
-int result = add(5, 10);
+src/core/       the interpreter: lexer, parser, tree-walking interpreter, trace, symbols. No DOM.
+src/worker/     runs a program in a Web Worker; Stop ends the worker
+src/ui/         React interface, CodeMirror 6 editor, timeline
+src/examples/   the eight example programs (English)
+docs/           principles, spec, plan, tasks, language reference, design notes
+tests/ e2e/     unit, golden, fuzz and documentation tests; Playwright end-to-end tests
 ```
 
-6. Funciones embebidas
-- `System.out.println()`: Imprime el valor o la lista de valores en consola.
-- `parseInt()`: Convierte un string a un int.
-- `parseFloat()`: Convierte un string a un float.
-- `toString()`: Convierte cualquiera de los otros tipos a string.
-- `toLowerCase()`: Convierte un string a minusculas.
-- `toUpperCase()`: Convierte un string a mayusculas.
-- `typeof()`: Retorna el tipo de una variable.
+The design decisions, and the alternatives that were rejected, are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The project was written spec-first: [principles](docs/00-principles.md), [spec](docs/01-spec.md) with 39 measurable acceptance criteria, [plan](docs/02-plan.md) and [tasks](docs/03-tasks.md), which ends in a table mapping each criterion to the test that checks it.
 
-6.1 Ejemplo de funciones embebidas
+## Testing
 
-```javascript
-System.out.println("El valor es: ", 100);
-int number = parseInt("123");
-string lower = toLowerCase("HOLA"); // hola
+- **718 unit tests**: lexer, parser (with a corpus of syntax errors and their exact positions), every operator and statement, structs, built-ins, limits, the trace and its replay, the symbol table, the timeline data.
+- **Golden files** pin the output of the seven original course programs, and the way it differs from the original interpreter's (`tests/golden/legacy-diff/`). The course's own hand-written expected outputs are checked too.
+- **Fuzzing**: 1,000 mutations of the samples and 500 token soups, seeded, must never make `run()` throw. (A one-off 20,000-case run found no exception.)
+- **48 end-to-end tests** (24 on a desktop and 24 on a phone viewport) with axe accessibility scans of every panel: Stop on a runaway loop, jumping from a problem to its line, stepping by keyboard, opening and saving files.
 
-```
+## Honest limits
 
-## Reporte de errores y Tabla de simbolos
+- **Recursion is limited to 400 nested calls** (Java allows thousands). The interpreter uses the JavaScript stack, which gives out first; a recursive sum up to 1000 does not fit.
+- A run is bounded: 20 million steps, 5 seconds, 200,000 characters of output, 1,000,000 elements per array. Past that it stops with a diagnostic and keeps its output.
+- The trace records up to 20,000 steps; longer runs complete but the timeline says it was cut.
+- Lighthouse on a simulated slow phone: Performance 82–100 across runs (median 83); Accessibility, Best Practices and SEO 100. Desktop preset: 93.
 
-- **Reporte de Errores**: Se muestra en la consola y en la seccion de reportes los errores encontrados en la interpretacion
-- **Tabla de simbolos**: Se muestra en el area de reportes los simbolos declarados en el codigo
+## License
 
-### Imagenes
-
-
-
-![ArchivoPrueba](./Reportes/image2.png)
+MIT. The language and the original interpreter come from a university course project; this rebuild is by Henry Quel.

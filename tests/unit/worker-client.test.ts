@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { run } from "../../src/core/run";
+import { TraceReplayer } from "../../src/core/trace/replay";
+import type { Trace } from "../../src/core/trace/types";
 import { RunClient, type WorkerLike } from "../../src/worker/client";
 import { handleRequest } from "../../src/worker/handler";
 import type { WorkerRequest, WorkerResponse } from "../../src/worker/protocol";
@@ -37,6 +39,17 @@ describe("the worker's handler", () => {
     expect(response.id).toBe(7);
     expect(response.outcome.result.stdout).toBe("");
     expect(response.outcome.series.map((s) => s.name)).toEqual(["x"]);
+  });
+
+  it("sends the state after the last step, the same one replaying the trace gives", () => {
+    const { outcome } = handleRequest({ type: "run", id: 1, source: "int x = 1; int[] a = {1, 2}; a[0] = 9; x = 3;" });
+    const trace = outcome.result.trace as Trace;
+    const replayed = new TraceReplayer(trace).stateAt(trace.steps.length - 1);
+    expect(outcome.finalState).toEqual(replayed);
+  });
+
+  it("has no final state when the program did not run", () => {
+    expect(handleRequest({ type: "run", id: 1, source: "int x = ;" }).outcome.finalState).toBeNull();
   });
 
   it("has no series when the program did not run", () => {

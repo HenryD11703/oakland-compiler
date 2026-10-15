@@ -3,11 +3,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="OakLand: a small Java-like language and an interpreter you can watch run." />
-    <title>OakLand</title>
+    <meta name="description" content="OakLand: a small Java-like language and an interpreter you can watch run. Step through the program, its variables, its call stack and its syntax tree in your browser." />
+    <meta name="theme-color" content="#f2eee4" />
+    <title>OakLand: watch a program run</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='2' y='2' width='12' height='12' fill='%23c9340e'/%3E%3C/svg%3E" />
+    <!-- What the page looks like before the scripts have run: the header and the starting program, so that the
+         first paint does not wait for the JavaScript. React replaces all of it. -->
+    <style>
+      html, body { height: 100%; }
+      body { margin: 0; background: #f2eee4; color: #14130f; border-top: 5px solid #14130f; font: 14px/1.45 system-ui, sans-serif; }
+      .shell-top { display: flex; align-items: center; padding: 10px 24px; border-bottom: 1px solid #14130f; height: 59px; box-sizing: border-box; }
+      .shell-brand { font-weight: 700; font-size: 22px; letter-spacing: -0.03em; margin: 0; }
+      .shell-brand::before { content: ""; display: inline-block; width: 12px; height: 12px; background: #c9340e; margin-right: 8px; }
+      .shell-brand span { font-weight: 400; }
+      .shell-code { margin: 0; padding: 14px 0 28px 58px; font: 13px/21px ui-monospace, Menlo, Consolas, monospace; overflow: hidden; white-space: pre; height: calc(100% - 64px); box-sizing: border-box; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <header class="shell-top"><h1 class="shell-brand">Oak<span>Land</span></h1></header>
+      <pre class="shell-code" id="shell-code"><!--shell-code--></pre>
+    </div>
+    <script>
+      // A saved draft replaces the starting program, so do not show the starting one first.
+      try {
+        if (window.localStorage.getItem("oakland:draft")) document.getElementById("shell-code").textContent = "";
+      } catch (error) {
+        // Storage can be blocked; the shell then simply shows the starting program.
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

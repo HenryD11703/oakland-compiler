@@ -91,7 +91,7 @@ Syntax is unchanged from the original except where stated. The full reference li
 
 - **AC-33** Usable at 375 px wide (the views become tabs) and at 1280 px (editor and views side by side); no horizontal page scroll in either.
 - **AC-34** Fully operable with the keyboard; axe reports no serious or critical violations on the main states; text contrast ≥ 4.5:1.
-- **AC-35** Lighthouse (mobile, production build): Performance ≥ 90, Accessibility, Best Practices and SEO ≥ 95.
+- **AC-35** Lighthouse (mobile, production build): Performance ≥ 90, Accessibility, Best Practices and SEO ≥ 95. **Measured (2026-10-15): Accessibility, Best Practices and SEO 100 in every run; Performance 82, 100 and 83 on three identical runs of the simulated slow phone (median 83), 93 with the desktop preset. The Performance target is not met consistently; see `03-tasks.md`, T27.**
 - **AC-36** `npm audit --omit=dev` reports 0 vulnerabilities; a clean clone builds with `npm ci && npm run build`.
 - **AC-37** CI on GitHub Actions runs lint, types, unit tests, build and E2E on every push.
 - **AC-38** README (English) with screenshots and a live link; `docs/LANGUAGE.md` (reference), `docs/ARCHITECTURE.md`, `CONTRIBUTING.md`, a technical `CLAUDE.md`, and a `LICENSE` file that exists.

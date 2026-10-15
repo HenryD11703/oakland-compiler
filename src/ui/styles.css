@@ -109,6 +109,7 @@ pre.out { margin: 0; font: 11.5px/1.3 var(--mono); overflow: auto; white-space: 
 .symbol-pick { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; text-decoration: underline dotted var(--dim); text-underline-offset: 3px; }
 
 /* ---------- editor ---------- */
+.code-fallback { margin: 0; padding: 14px 0 28px 58px; font: 13px/21px var(--mono); overflow: hidden; white-space: pre; flex: 1; color: var(--ink); }
 .cm-editor { flex: 1; min-width: 0; height: 100%; background: transparent; color: var(--ink); font: 13px/21px var(--mono); }
 .cm-editor.cm-focused { outline: none; }
 .cm-editor .cm-scroller { font-family: var(--mono); line-height: 21px; overflow: auto; padding: 14px 0 28px; }

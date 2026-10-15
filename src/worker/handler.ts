@@ -1,4 +1,5 @@
 import { run } from "../core/run";
+import { TraceReplayer } from "../core/trace/replay";
 import { numericSeries } from "../core/trace/series";
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 
@@ -6,5 +7,7 @@ import type { WorkerRequest, WorkerResponse } from "./protocol";
 export function handleRequest(request: WorkerRequest): WorkerResponse {
   const result = run(request.source);
   const series = result.trace ? numericSeries(result.trace) : [];
-  return { type: "result", id: request.id, outcome: { result, series } };
+  const trace = result.trace;
+  const finalState = trace && trace.steps.length > 0 ? new TraceReplayer(trace).stateAt(trace.steps.length - 1) : null;
+  return { type: "result", id: request.id, outcome: { result, series, finalState } };
 }

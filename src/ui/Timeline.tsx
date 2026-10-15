@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Series } from "../core/trace/series";
 import type { Trace } from "../core/trace/types";
 import { computeLanes, stepOfFraction } from "./timelineData";
@@ -25,9 +25,10 @@ const LANE_HEIGHT_COMPACT = { line: 36, conditions: 20, output: 22, series: 18 }
  */
 export function Timeline({ trace, series, lineCount, totalOutput, step, onSeek, valueText }: TimelineProps) {
   const frame = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(900);
+  // Measured before the first paint, so that the lanes are computed once, at their real width.
+  const [width, setWidth] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = frame.current;
     if (!node) return;
     const measure = (): void => setWidth(Math.max(200, Math.floor(node.clientWidth)));
@@ -37,7 +38,7 @@ export function Timeline({ trace, series, lineCount, totalOutput, step, onSeek, 
     return () => observer.disconnect();
   }, []);
 
-  const lanes = useMemo(() => computeLanes(trace, series, lineCount, totalOutput, width), [trace, series, lineCount, totalOutput, width]);
+  const lanes = useMemo(() => computeLanes(trace, series, lineCount, totalOutput, Math.max(width, 1)), [trace, series, lineCount, totalOutput, width]);
   const steps = trace.steps.length;
 
   const heights = width < 520 ? LANE_HEIGHT_COMPACT : LANE_HEIGHT;

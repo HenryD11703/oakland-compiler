@@ -1,10 +1,10 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { parse } from "../core/parser/parser";
 import { renderValue, TraceReplayer } from "../core/trace/replay";
 import { DEFAULT_EXAMPLE, EXAMPLES } from "../examples";
 import { RunClient } from "../worker/client";
 import type { RunOutcome } from "../worker/protocol";
-import { Editor, type EditorHandle, type InlineEntry } from "./Editor";
+import type { EditorHandle, InlineEntry } from "./Editor";
 import { assignedNames } from "./inlineValues";
 import { AstTree, count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
 import { Timeline } from "./Timeline";
@@ -19,6 +19,10 @@ const SPEEDS = [
   { label: "Fast", rate: 200 },
   { label: "Very fast", rate: 1200 },
 ] as const;
+
+// The editor (CodeMirror) is the heaviest part of the page; it loads in its own chunk while the rest of the
+// interface is already on screen.
+const Editor = lazy(() => import("./Editor").then((module) => ({ default: module.Editor })));
 
 const DRAFT_KEY = "oakland:draft";
 
@@ -39,7 +43,7 @@ function saveDraft(text: string): void {
 }
 
 export function App() {
-  const [initial] = useState(() => {
+  const [initial, setInitial] = useState(() => {
     const draft = loadDraft();
     return draft ? { title: "Your draft", text: draft } : { title: `${DEFAULT_EXAMPLE.title} (example)`, text: DEFAULT_EXAMPLE.source };
   });
@@ -120,8 +124,11 @@ export function App() {
       setTitle(name);
       setMenu(false);
       setView("code");
-      editor.current?.setText(text);
+      // If the editor is still loading, it will start with this text.
+      if (editor.current) editor.current.setText(text);
+      else setInitial({ title: name, text });
       sourceRef.current = text;
+      setSource(text);
       void run();
     },
     [run],
@@ -166,7 +173,12 @@ export function App() {
   const trace = outcome?.result.trace ?? null;
   const steps = trace?.steps.length ?? 0;
   const replayer = useMemo(() => (trace ? new TraceReplayer(trace) : null), [trace]);
-  const state = useMemo(() => (replayer ? replayer.stateAt(step) : null), [replayer, step]);
+  // The run opens on its last step, whose state the worker already computed: no need to replay thirteen thousand steps.
+  const finalState = outcome?.finalState ?? null;
+  const state = useMemo(
+    () => (finalState && step === steps - 1 ? finalState : replayer ? replayer.stateAt(step) : null),
+    [replayer, finalState, step, steps],
+  );
   const changes = useMemo(() => (replayer && step >= 0 ? replayer.changesAt(step) : null), [replayer, step]);
   const current = trace && step >= 0 ? trace.steps[step] : undefined;
   const showingRun = outcome !== null && !stale;
@@ -312,7 +324,15 @@ export function App() {
       </nav>
 
       <main className="sheet" data-view={view}>
-        <Editor ref={editor} initialText={initial.text} onChange={onEdit} onRun={() => void run()} diagnostics={diagnostics} activeSpan={activeSpan} inline={inline} />
+        <Suspense
+          fallback={
+            <div className="code">
+              <pre className="code-fallback">{initial.text}</pre>
+            </div>
+          }
+        >
+          <Editor ref={editor} initialText={initial.text} onChange={onEdit} onRun={() => void run()} diagnostics={diagnostics} activeSpan={activeSpan} inline={inline} />
+        </Suspense>
 
         <aside className="side">
           <section className="block now" aria-label="Current step">
