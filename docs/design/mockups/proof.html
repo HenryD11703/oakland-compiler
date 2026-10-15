@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — direction A: Proof (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f2eee4;
+  --paper-2: #e9e4d6;
+  --ink: #14130f;
+  --dim: #675f4e;
+  --rule: #cdc5b0;
+  --mark: #c9340e;          /* the proofreader's red: the one accent */
+  --mark-wash: rgba(201, 52, 14, .09);
+  --ui: "Instrument Sans", system-ui, sans-serif;
+  --mono: "Spline Sans Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 14px/1.45 var(--ui); display: flex; flex-direction: column; border-top: 5px solid var(--ink); }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--mark); outline-offset: 2px; }
+
+/* ---- top bar ---- */
+.top { display: flex; align-items: center; gap: 24px; padding: 10px 24px; border-bottom: 1px solid var(--ink); flex: none; }
+.brand { font-weight: 700; font-size: 22px; letter-spacing: -.03em; display: flex; align-items: baseline; gap: 2px; }
+.brand::before { content: ""; width: 12px; height: 12px; background: var(--mark); display: inline-block; margin-right: 8px; transform: translateY(1px); }
+.brand span { font-weight: 400; }
+.menu { display: flex; align-items: center; gap: 14px; margin-left: 8px; }
+.menu button { background: none; border: 0; border-bottom: 1px solid var(--ink); padding: 2px 0; font-weight: 500; }
+.file { font-family: var(--mono); font-size: 12.5px; color: var(--dim); }
+.actions { margin-left: auto; display: flex; gap: 8px; }
+.run, .stop { border: 1px solid var(--ink); background: none; padding: 6px 18px; font-weight: 600; letter-spacing: .02em; }
+.run { background: var(--ink); color: var(--paper); }
+.stop { color: var(--dim); border-color: var(--rule); }
+
+/* ---- sheet ---- */
+.sheet { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 7fr) minmax(320px, 5fr); }
+.code { overflow: auto; border-right: 1px solid var(--ink); padding: 14px 0 28px; }
+.code ol { list-style: none; margin: 0; padding: 0; font: 13px/21px var(--mono); }
+.line { display: grid; grid-template-columns: 52px minmax(0, 1fr) 190px; align-items: baseline; border-left: 3px solid transparent; }
+.line .n { text-align: right; padding-right: 14px; color: var(--dim); font-size: 11.5px; user-select: none; }
+.line .src { white-space: pre; padding-right: 12px; overflow: hidden; text-overflow: clip; }
+.line .val { color: var(--dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 16px; border-left: 1px dotted var(--rule); padding-left: 10px; }
+.line .val b { font-weight: 500; color: var(--ink); }
+.line.now { background: var(--mark-wash); border-left-color: var(--mark); }
+.line.now .n { color: var(--mark); font-weight: 600; }
+.line.now .val, .line.now .val b { color: var(--mark); font-weight: 600; }
+.t-kw { font-weight: 600; } .t-ty { color: var(--dim); font-weight: 500; } .t-lit, .t-num { color: var(--mark); } .t-str { color: #5a4a1d; } .t-cm { color: #8b836f; font-style: italic; } .t-fn { text-decoration: underline dotted var(--rule); } .t-p { color: #3d3a2f; }
+
+.side { overflow: auto; display: flex; flex-direction: column; }
+.block { padding: 16px 24px; border-bottom: 1px solid var(--rule); }
+.label { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--dim); font-weight: 600; margin-bottom: 8px; }
+.now-box .big { font-size: 26px; font-weight: 600; letter-spacing: -.02em; line-height: 1.1; }
+.now-box .big small { font-size: 14px; color: var(--dim); font-weight: 400; letter-spacing: 0; }
+.now-box .what { margin-top: 8px; font-family: var(--mono); font-size: 12.5px; }
+.now-box .what b { color: var(--mark); font-weight: 600; }
+.bar { height: 3px; background: var(--rule); margin-top: 12px; }
+.bar i { display: block; height: 100%; background: var(--mark); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--dim); font-weight: 600; padding: 0 8px 6px 0; border-bottom: 1px solid var(--ink); }
+td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--rule); vertical-align: baseline; }
+td:first-child { font-family: var(--mono); font-weight: 600; }
+td.v { font-family: var(--mono); max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr.changed td.v { color: var(--mark); font-weight: 600; }
+tr.changed td:first-child::before { content: "● "; color: var(--mark); font-size: 9px; }
+td.t { color: var(--dim); font-size: 12px; }
+
+.views { flex: 1; min-height: 220px; display: flex; flex-direction: column; border-bottom: 0; }
+[role=tablist] { display: flex; gap: 18px; margin-bottom: 12px; border-bottom: 1px solid var(--ink); }
+[role=tab] { background: none; border: 0; padding: 4px 0 8px; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+[role=tab][aria-selected=true] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+[role=tab] sup { color: var(--mark); font-weight: 700; margin-left: 2px; }
+pre.out { margin: 0; font: 11.5px/1.35 var(--mono); overflow: auto; }
+pre.out .fresh { color: var(--mark); font-weight: 600; }
+.rows { font-size: 12px; color: var(--dim); margin: 8px 0 0; }
+.problems { list-style: none; margin: 0; padding: 0; }
+.problems li { display: grid; grid-template-columns: 70px 56px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.phase { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--mark); font-weight: 700; }
+.where { font-family: var(--mono); color: var(--dim); }
+.note { font-size: 12px; color: var(--dim); margin: 10px 0 0; }
+.ast ul { list-style: none; margin: 0; padding-left: 16px; border-left: 1px solid var(--rule); }
+.ast > ul { border-left: 0; padding-left: 0; }
+.ast li { padding: 2px 0; font-family: var(--mono); font-size: 12px; }
+.ast b { font-weight: 600; } .ast i { font-style: normal; color: var(--mark); }
+.ast-more { color: var(--dim); }
+
+/* ---- tape (transport) ---- */
+.tape { flex: none; border-top: 1px solid var(--ink); padding: 10px 24px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 22px; align-items: center; background: var(--paper-2); }
+.btns { display: flex; gap: 6px; }
+.btns button { width: 38px; height: 34px; background: var(--paper); border: 1px solid var(--ink); font-size: 14px; }
+.btns .play { width: 64px; background: var(--ink); color: var(--paper); font-weight: 600; font-size: 13px; }
+.slider { display: grid; gap: 4px; }
+input[type=range] { width: 100%; accent-color: var(--mark); margin: 0; height: 22px; }
+.ticks { display: flex; justify-content: space-between; font: 10.5px var(--mono); color: var(--dim); }
+.readout { font: 600 13px var(--mono); text-align: right; min-width: 150px; }
+.readout small { display: block; font-weight: 400; color: var(--dim); font-size: 11px; }
+
+.mtabs { display: none; }
+
+/* ---- phone ---- */
+@media (max-width: 760px) {
+  body { border-top-width: 4px; }
+  .top { padding: 8px 16px; gap: 12px; flex-wrap: wrap; }
+  .brand { font-size: 19px; }
+  .menu { order: 3; width: 100%; margin: 0; justify-content: space-between; }
+  .actions .stop { display: none; }
+  .mtabs { display: flex; border-bottom: 1px solid var(--ink); flex: none; }
+  .mtabs button { flex: 1; background: none; border: 0; padding: 10px 0; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; }
+  .mtabs button[aria-selected=true] { color: var(--ink); font-weight: 600; border-bottom-color: var(--mark); }
+  .sheet { display: block; overflow: auto; }
+  .code, .side { border: 0; overflow: visible; }
+  .line { grid-template-columns: 38px minmax(0, 1fr); }
+  .line .val { display: none; }
+  .line .src { overflow-x: auto; }
+  body[data-view=code] .side, body[data-view=state] .code, body[data-view=out] .code { display: none; }
+  body[data-view=state] .views, body[data-view=out] .now-box, body[data-view=out] .vars { display: none; }
+  body[data-view=out] .views { min-height: 0; }
+  .block { padding: 14px 16px; }
+  .tape { grid-template-columns: 1fr; gap: 8px; padding: 8px 16px 10px; }
+  .btns { justify-content: space-between; }
+  .btns button { flex: 1; }
+  .readout { text-align: left; display: flex; justify-content: space-between; }
+  .readout small { display: inline; }
+  .ticks { display: none; }
+}
+</style>
+</head>
+<body data-view="code">
+<header class="top">
+  <div class="brand">Oak<span>Land</span></div>
+  <nav class="menu" aria-label="Program">
+    <button type="button">Examples ▾</button>
+    <span class="file" id="file"></span>
+  </nav>
+  <div class="actions">
+    <button class="stop" type="button">Stop</button>
+    <button class="run" type="button">Run ▸</button>
+  </div>
+</header>
+
+<div class="mtabs" role="tablist" aria-label="View">
+  <button role="tab" data-v="code" aria-selected="true">Code</button>
+  <button role="tab" data-v="state" aria-selected="false">State</button>
+  <button role="tab" data-v="out" aria-selected="false">Views</button>
+</div>
+
+<main class="sheet">
+  <section class="code" aria-label="Source code"><ol id="code"></ol></section>
+
+  <aside class="side">
+    <section class="block now-box" aria-label="Current step">
+      <div class="label">Now</div>
+      <div class="big" id="big"></div>
+      <div class="what" id="what"></div>
+      <div class="bar"><i id="fill"></i></div>
+    </section>
+    <section class="block vars" aria-label="Variables">
+      <div class="label">Variables</div>
+      <table><thead><tr><th>Name</th><th>Type</th><th>Value</th></tr></thead><tbody id="vars"></tbody></table>
+    </section>
+    <section class="block views" aria-label="Views" id="views">
+      <div role="tablist">
+        <button role="tab" data-tab="out">Output</button>
+        <button role="tab" data-tab="problems">Problems<sup id="pcount"></sup></button>
+        <button role="tab" data-tab="ast">Syntax tree</button>
+        <button role="tab" data-tab="symbols">Symbols</button>
+      </div>
+      <div data-pane="out"><pre class="out" id="out"></pre><p class="rows" id="rows"></p></div>
+      <div data-pane="problems"><ul class="problems" id="problems"></ul><p class="note" id="pnote"></p></div>
+      <div data-pane="ast" class="ast"><ul id="ast"></ul><p class="note" id="anote"></p></div>
+      <div data-pane="symbols"><table><thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Scope</th><th>At</th></tr></thead><tbody id="symbols"></tbody></table></div>
+    </section>
+  </aside>
+</main>
+
+<footer class="tape" aria-label="Step through the run">
+  <div class="btns">
+    <button type="button" id="first" aria-label="Back to the start">⏮</button>
+    <button type="button" id="prev" aria-label="Back 100 steps">◂</button>
+    <button type="button" id="play" class="play">Play</button>
+    <button type="button" id="next" aria-label="Forward 100 steps">▸</button>
+  </div>
+  <div class="slider">
+    <input type="range" id="slider" min="0" aria-label="Step">
+    <div class="ticks"><span>0</span><span>2,500</span><span>5,000</span><span>7,500</span><span>10,000</span><span>13,228</span></div>
+  </div>
+  <div class="readout" id="readout"></div>
+</footer>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { OAK, esc, int, codeLine, lineVariables, FEATURED, outputRows, variable, player, tabs, astHtml, symbolsRows, problemsRows } = M;
+const $ = (id) => document.getElementById(id);
+$("file").textContent = OAK.program.name;
+const slider = $("slider");
+slider.max = OAK.snapshots.length - 1;
+
+$("code").innerHTML = OAK.program.lines.map((_, i) => {
+  const n = i + 1;
+  return `<li class="line" data-n="${n}"><span class="n">${n}</span><span class="src">${codeLine(n)}</span><span class="val"></span></li>`;
+}).join("");
+const lines = [...document.querySelectorAll(".line")];
+
+$("ast").innerHTML = astHtml(OAK.ast);
+$("anote").textContent = `Only the statement being run is drawn here — the whole program has ${OAK.astTotal} nodes.`;
+$("symbols").innerHTML = symbolsRows();
+$("problems").innerHTML = problemsRows();
+$("pcount").textContent = OAK.problems.items.length;
+$("pnote").textContent = `The diamond runs without problems. These two come from ${OAK.problems.from}, which has mistakes on purpose.`;
+tabs($("views"));
+
+function render(k) {
+  const s = OAK.snapshots[k];
+  slider.value = k;
+  lines.forEach((el) => {
+    const n = Number(el.dataset.n);
+    const here = n >= s.line && n <= s.endLine;
+    el.classList.toggle("now", here);
+    const name = lineVariables[n];
+    const v = name && variable(s, name);
+    el.querySelector(".val").innerHTML = v ? `${esc(name)} = <b>${esc(v.value.length > 18 ? v.value.slice(0, 15) + "…\"" : v.value)}</b>` : "";
+  });
+  const current = document.querySelector(".line.now");
+  if (current) current.scrollIntoView({ block: "nearest" });
+  $("big").innerHTML = `Step ${int(s.index)} <small>of ${int(OAK.run.steps)}</small>`;
+  const text = OAK.program.source.split(/\r?\n/)[s.line - 1].trim();
+  const what = s.kind === "condition" ? `condition <b>${esc(s.note)}</b>` : s.kind === "end" ? "<b>program finished</b>" : "statement ran";
+  $("what").innerHTML = `Line ${s.line} · ${what}`;
+  $("fill").style.width = (s.index / (OAK.run.steps - 1)) * 100 + "%";
+  $("vars").innerHTML = s.variables.map((v) => `<tr class="${v.changed ? "changed" : ""}"><td>${esc(v.name)}</td><td class="t">${esc(v.type)}</td><td class="v" title="${esc(v.value)}">${esc(v.value)}</td></tr>`).join("");
+  const rows = outputRows(s);
+  $("out").innerHTML = rows.map((r, i) => (i === rows.length - 1 && s.index < OAK.run.steps - 2 ? `<span class="fresh">${esc(r)}</span>` : esc(r))).join("\n");
+  $("rows").textContent = `${rows.length} of ${OAK.run.rows} rows printed`;
+  $("readout").innerHTML = `${int(s.index)}<small>${s.rows} rows · ${s.kind}</small>`;
+}
+const p = player(render, FEATURED);
+$("play").addEventListener("click", () => { p.toggle(); $("play").textContent = p.playing ? "Pause" : "Play"; });
+$("prev").addEventListener("click", () => p.step(-1));
+$("next").addEventListener("click", () => p.step(1));
+$("first").addEventListener("click", () => p.go(0));
+slider.addEventListener("input", () => p.go(Number(slider.value)));
+document.querySelectorAll(".mtabs [data-v]").forEach((b) => b.addEventListener("click", () => {
+  document.body.dataset.view = b.dataset.v;
+  document.querySelectorAll(".mtabs [data-v]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+}));
+</script>
+</body>
+</html>

@@ -25,7 +25,7 @@
 **Gate:** I show Henry `docs/language-changes.md` (what now prints differently) before Phase 2.
 
 ## Phase 2 — Product (3 sessions)
-- **T16 Design directions.** Three static mockups (desktop + 375 px) of the playground, with real data from the diamond sample. *Done when:* Henry picks one (**approval gate b**).
+- 🟡 **T16 Design directions.** *(Three mockups made: `docs/design/00-directions.md`; waiting for Henry to choose.)* Three static mockups (desktop + 375 px) of the playground, with real data from the diamond sample. *Done when:* Henry picks one (**approval gate b**).
 - **T17 Worker + protocol.** Run, Stop, fresh worker per run. Covers: AC-24, AC-25.
 - **T18 Shell + editor.** CodeMirror with OakLand highlighting, squiggles, `Ctrl/Cmd+Enter`. Covers: AC-26.
 - **T19 Output and Problems panels.** Click-to-jump. Covers: AC-27, AC-28.

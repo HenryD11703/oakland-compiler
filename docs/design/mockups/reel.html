@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — direction B: Reel (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=Red+Hat+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e1012;
+  --surface: #14181b;
+  --rule: #262c32;
+  --text: #e7e3d8;
+  --dim: #8f959a;
+  --beam: #4fe3c1;           /* the one accent: the playhead and everything "now" */
+  --beam-wash: rgba(79, 227, 193, .10);
+  --bad: #ff6b7a;
+  --ui: "Archivo", system-ui, sans-serif;
+  --mono: "Red Hat Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui); display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--beam); outline-offset: 2px; }
+
+/* ---- bar ---- */
+.top { display: flex; align-items: center; gap: 20px; padding: 0 20px; height: 48px; border-bottom: 1px solid var(--rule); flex: none; }
+.brand { font-weight: 800; font-size: 17px; letter-spacing: .02em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }
+.brand::before { content: ""; width: 4px; height: 20px; background: var(--beam); }
+.brand span { color: var(--dim); font-weight: 500; }
+.top .file { font: 12.5px var(--mono); color: var(--dim); }
+.top .sp { flex: 1; }
+.top button { background: none; border: 1px solid var(--rule); padding: 6px 14px; border-radius: 3px; font-weight: 600; font-size: 13px; }
+.top .run { background: var(--beam); color: #04231c; border-color: var(--beam); }
+
+/* ---- stage ---- */
+.stage { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 11fr) minmax(300px, 9fr); }
+.code { overflow: auto; padding: 10px 0 20px; border-right: 1px solid var(--rule); }
+.code ol { list-style: none; margin: 0; padding: 0; font: 12.5px/20px var(--mono); }
+.line { display: grid; grid-template-columns: 46px minmax(0, 1fr); }
+.line .n { text-align: right; padding-right: 14px; color: #5d6469; font-size: 11px; user-select: none; }
+.line .src { white-space: pre; padding-right: 16px; }
+.line.now { background: var(--beam-wash); box-shadow: inset 3px 0 0 var(--beam); }
+.line.now .n { color: var(--beam); font-weight: 600; }
+.t-kw { color: #c9d1d6; font-weight: 600; } .t-ty { color: #8ab4c2; } .t-lit { color: #f0b475; } .t-num { color: #f0b475; } .t-str { color: #a9d68e; } .t-cm { color: #5e666b; font-style: italic; } .t-id { color: var(--text); } .t-fn { color: #c9d1d6; } .t-p { color: #8f959a; }
+
+.inspector { display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
+[role=tablist] { display: flex; border-bottom: 1px solid var(--rule); flex: none; overflow-x: auto; }
+[role=tab] { background: none; border: 0; padding: 11px 16px; color: var(--dim); font-weight: 500; border-bottom: 2px solid transparent; white-space: nowrap; }
+[role=tab][aria-selected=true] { color: var(--text); border-bottom-color: var(--beam); font-weight: 600; }
+[role=tab] sup { color: var(--bad); font-weight: 700; margin-left: 3px; }
+.pane { flex: 1; overflow: auto; padding: 14px 18px; }
+.watch { display: grid; gap: 8px; }
+.card { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 3px; background: var(--bg); }
+.card.changed { border-color: var(--beam); }
+.card .name { font: 600 13px var(--mono); }
+.card .type { color: var(--dim); font: 11px var(--mono); text-align: right; align-self: center; }
+.card .value { grid-column: 1 / -1; font: 15px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card.changed .value { color: var(--beam); }
+.card svg { grid-column: 1 / -1; width: 100%; height: 26px; margin-top: 4px; }
+pre.out { margin: 0; font: 11.5px/1.35 var(--mono); color: #cfd4d6; }
+pre.out .fresh { color: var(--beam); }
+.meta { color: var(--dim); font-size: 12px; margin: 10px 0 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th { text-align: left; color: var(--dim); font-weight: 500; font-size: 11.5px; padding: 0 8px 8px 0; border-bottom: 1px solid var(--rule); }
+td { padding: 7px 8px 7px 0; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 12px; }
+.problems { list-style: none; margin: 0; padding: 0; }
+.problems li { display: grid; grid-template-columns: 72px 54px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 13px; }
+.phase { color: var(--bad); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.where { font-family: var(--mono); color: var(--dim); }
+.ast ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px solid var(--rule); }
+.ast > ul { border: 0; padding: 0; }
+.ast li { padding: 2px 0; font: 12px var(--mono); }
+.ast i { font-style: normal; color: var(--beam); } .ast-more { color: var(--dim); }
+
+/* ---- timeline ---- */
+.reel { flex: none; border-top: 1px solid var(--rule); background: var(--surface); }
+.deck { display: flex; align-items: center; gap: 10px; padding: 8px 20px; border-bottom: 1px solid var(--rule); }
+.deck button { width: 34px; height: 30px; background: var(--bg); border: 1px solid var(--rule); border-radius: 3px; }
+.deck .play { width: 76px; background: var(--beam); color: #04231c; border-color: var(--beam); font-weight: 700; }
+.deck .time { margin-left: 8px; font: 600 13px var(--mono); }
+.deck .time small { color: var(--dim); font-weight: 400; }
+.deck .legend { margin-left: auto; font-size: 12px; color: var(--dim); }
+.lanes { position: relative; display: grid; grid-template-columns: 96px 1fr; }
+.lane-labels { display: grid; grid-template-rows: 18px 66px 24px 38px 30px 30px; font-size: 11.5px; color: var(--dim); }
+.lane-labels div { padding: 0 0 0 20px; display: flex; align-items: center; border-bottom: 1px solid var(--rule); }
+.chart { position: relative; padding-right: 20px; }
+.chart svg { display: block; width: 100%; height: 206px; }
+.chart input[type=range] { position: absolute; inset: 0 20px 0 0; width: calc(100% - 20px); height: 100%; opacity: 0; cursor: ew-resize; margin: 0; }
+.chart input[type=range]:focus-visible + .focus-ring { opacity: 1; }
+.focus-ring { position: absolute; inset: 0 20px 0 0; border: 2px solid var(--beam); opacity: 0; pointer-events: none; }
+.mtabs { display: none; }
+
+@media (max-width: 760px) {
+  .top { padding: 0 14px; gap: 10px; }
+  .top .file, .top .stop { display: none; }
+  .stage { display: block; overflow: auto; }
+  .code, .inspector { border: 0; overflow: visible; }
+  .line { grid-template-columns: 36px minmax(0, 1fr); }
+  .line .src { overflow-x: auto; }
+  .mtabs { display: flex; border-bottom: 1px solid var(--rule); flex: none; }
+  .mtabs button { flex: 1; background: none; border: 0; padding: 11px 0; color: var(--dim); font-weight: 500; border-bottom: 2px solid transparent; }
+  .mtabs button[aria-selected=true] { color: var(--text); font-weight: 600; border-bottom-color: var(--beam); }
+  body[data-view=code] .inspector, body[data-view=state] .code { display: none; }
+  .deck { padding: 8px 14px; flex-wrap: wrap; }
+  .deck .legend { display: none; }
+  .deck .time { margin-left: auto; }
+  .lanes { grid-template-columns: 52px 1fr; }
+  .lane-labels div { padding-left: 14px; font-size: 10.5px; }
+  .lane-labels div span.long { display: none; }
+  .chart { padding-right: 14px; }
+  .chart svg { height: 150px; }
+  .lane-labels { grid-template-rows: 14px 44px 18px 28px 22px 22px; }
+  .chart input[type=range], .focus-ring { inset: 0 14px 0 0; width: calc(100% - 14px); }
+}
+</style>
+</head>
+<body data-view="code">
+<header class="top">
+  <div class="brand">Oak<span>Land</span></div>
+  <span class="file" id="file"></span>
+  <span class="sp"></span>
+  <button type="button">Examples ▾</button>
+  <button type="button" class="stop">Stop</button>
+  <button type="button" class="run">Run ▸</button>
+</header>
+
+<div class="mtabs" role="tablist" aria-label="View">
+  <button role="tab" data-v="code" aria-selected="true">Code</button>
+  <button role="tab" data-v="state" aria-selected="false">Inspect</button>
+</div>
+
+<main class="stage">
+  <section class="code" aria-label="Source code"><ol id="code"></ol></section>
+  <aside class="inspector" id="inspector" aria-label="Inspector">
+    <div role="tablist">
+      <button role="tab" data-tab="watch">Variables</button>
+      <button role="tab" data-tab="out">Output</button>
+      <button role="tab" data-tab="problems">Problems<sup id="pcount"></sup></button>
+      <button role="tab" data-tab="ast">Tree</button>
+      <button role="tab" data-tab="symbols">Symbols</button>
+    </div>
+    <div class="pane" data-pane="watch"><div class="watch" id="watch"></div></div>
+    <div class="pane" data-pane="out"><pre class="out" id="out"></pre><p class="meta" id="rows"></p></div>
+    <div class="pane" data-pane="problems"><ul class="problems" id="problems"></ul><p class="meta" id="pnote"></p></div>
+    <div class="pane ast" data-pane="ast"><ul id="ast"></ul><p class="meta" id="anote"></p></div>
+    <div class="pane" data-pane="symbols"><table><thead><tr><th>Name</th><th>Kind</th><th>Type</th><th>Scope</th><th>At</th></tr></thead><tbody id="symbols"></tbody></table></div>
+  </aside>
+</main>
+
+<footer class="reel" aria-label="Timeline of the run">
+  <div class="deck">
+    <button type="button" id="first" aria-label="Back to the start">⏮</button>
+    <button type="button" id="prev" aria-label="Back 100 steps">◂</button>
+    <button type="button" id="play" class="play">▶ Play</button>
+    <button type="button" id="next" aria-label="Forward 100 steps">▸</button>
+    <span class="time" id="time"></span>
+    <span class="legend">Drag across the lanes to move through the run</span>
+  </div>
+  <div class="lanes">
+    <div class="lane-labels">
+      <div></div><div>Line<span class="long">&nbsp;being run</span></div><div>If</div><div>Output</div><div>i</div><div>j</div>
+    </div>
+    <div class="chart">
+      <svg id="chart" viewBox="0 0 1000 206" preserveAspectRatio="none" role="img" aria-label="Timeline: which line ran, which conditions held, what was printed, and the values of i and j over the whole run"></svg>
+      <input type="range" id="scrub" min="0" aria-label="Step">
+      <div class="focus-ring"></div>
+    </div>
+  </div>
+</footer>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { OAK, esc, int, codeLine, FEATURED, outputRows, player, tabs, astHtml, symbolsRows, problemsRows } = M;
+const $ = (id) => document.getElementById(id);
+$("file").textContent = OAK.program.name;
+$("code").innerHTML = OAK.program.lines.map((_, i) => `<li class="line" data-n="${i + 1}"><span class="n">${i + 1}</span><span class="src">${codeLine(i + 1)}</span></li>`).join("");
+const lines = [...document.querySelectorAll(".line")];
+$("ast").innerHTML = astHtml(OAK.ast);
+$("anote").textContent = `Only the statement being run is drawn: the whole program has ${OAK.astTotal} nodes.`;
+$("symbols").innerHTML = symbolsRows();
+$("problems").innerHTML = problemsRows();
+$("pcount").textContent = OAK.problems.items.length;
+$("pnote").textContent = `The diamond has none. These come from ${OAK.problems.from}, which has mistakes on purpose.`;
+tabs($("inspector"));
+
+// ---- timeline drawn from the real snapshots
+const N = OAK.snapshots.length, W = 1000;
+const x = (k) => (k / (N - 1)) * W;
+const lanes = { ruler: [0, 18], pc: [18, 84], iff: [84, 108], out: [108, 146], i: [146, 176], j: [176, 206] };
+const series = (name) => OAK.snapshots.map((s) => { const v = s.variables.find((q) => q.name === name); return v ? parseFloat(v.value) : NaN; });
+const scale = (values, [top, bottom], pad = 4) => {
+  const finite = values.filter((v) => !isNaN(v));
+  const min = Math.min(...finite), max = Math.max(...finite);
+  return values.map((v) => (isNaN(v) ? NaN : bottom - pad - ((v - min) / (max - min || 1)) * (bottom - top - pad * 2)));
+};
+const path = (ys) => ys.map((y, k) => (isNaN(y) ? "" : `${k && !isNaN(ys[k - 1]) ? "L" : "M"}${x(k).toFixed(1)} ${y.toFixed(1)}`)).join(" ");
+const maxLine = OAK.program.lines.length;
+const pcY = OAK.snapshots.map((s) => lanes.pc[0] + 6 + ((s.line - 1) / (maxLine - 1)) * (lanes.pc[1] - lanes.pc[0] - 12));
+const rowsMax = OAK.run.rows;
+let svg = "";
+Object.values(lanes).forEach(([, b]) => { svg += `<line x1="0" x2="${W}" y1="${b}" y2="${b}" stroke="#262c32" stroke-width="1" vector-effect="non-scaling-stroke"/>`; });
+for (let t = 0; t <= OAK.run.steps; t += 2500) svg += `<line x1="${(t / OAK.run.steps) * W}" x2="${(t / OAK.run.steps) * W}" y1="0" y2="206" stroke="#1d2226" vector-effect="non-scaling-stroke"/>`;
+svg += `<path d="${path(pcY)}" fill="none" stroke="#6fbfae" stroke-width="1.4" vector-effect="non-scaling-stroke"/>`;
+OAK.snapshots.forEach((s, k) => {
+  if (s.kind !== "condition") return;
+  const y = (lanes.iff[0] + lanes.iff[1]) / 2;
+  svg += s.note === "true" ? `<rect x="${x(k) - 2}" y="${y - 5}" width="4" height="10" fill="#e7e3d8"/>` : `<rect x="${x(k) - 1.5}" y="${y - 3}" width="3" height="6" fill="none" stroke="#5d6469" vector-effect="non-scaling-stroke"/>`;
+});
+const outY = OAK.snapshots.map((s) => lanes.out[1] - 3 - (s.rows / rowsMax) * (lanes.out[1] - lanes.out[0] - 8));
+svg += `<path d="${path(outY)} L${W} ${lanes.out[1]} L0 ${lanes.out[1]} Z" fill="rgba(79,227,193,.14)" stroke="#4fe3c1" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
+svg += `<path d="${path(scale(series("i"), lanes.i))}" fill="none" stroke="#f0b475" stroke-width="1.3" vector-effect="non-scaling-stroke"/>`;
+svg += `<path d="${path(scale(series("j"), lanes.j))}" fill="none" stroke="#8ab4c2" stroke-width="1.3" vector-effect="non-scaling-stroke"/>`;
+svg += `<g id="head"><line id="headline" x1="0" x2="0" y1="0" y2="206" stroke="#4fe3c1" stroke-width="2" vector-effect="non-scaling-stroke"/><rect id="headcap" x="-6" y="0" width="12" height="9" fill="#4fe3c1"/></g>`;
+$("chart").innerHTML = svg;
+const scrub = $("scrub");
+scrub.max = N - 1;
+
+function render(k) {
+  const s = OAK.snapshots[k];
+  scrub.value = k;
+  $("headline").setAttribute("x1", x(k)); $("headline").setAttribute("x2", x(k));
+  $("headcap").setAttribute("x", x(k) - 6);
+  lines.forEach((el) => el.classList.toggle("now", Number(el.dataset.n) >= s.line && Number(el.dataset.n) <= s.endLine));
+  const cur = document.querySelector(".line.now"); if (cur) cur.scrollIntoView({ block: "nearest" });
+  $("time").innerHTML = `${int(s.index)} <small>/ ${int(OAK.run.steps)} · line ${s.line}${s.note ? " · " + esc(s.note) : ""}</small>`;
+  $("watch").innerHTML = s.variables.map((v) => {
+    const spark = v.type === "float" && ["i", "j"].includes(v.name) ? "" : "";
+    return `<div class="card ${v.changed ? "changed" : ""}"><span class="name">${esc(v.name)}</span><span class="type">${esc(v.type)}${v.changed ? " · changed" : ""}</span><span class="value" title="${esc(v.value)}">${esc(v.value)}</span>${spark}</div>`;
+  }).join("");
+  const rows = outputRows(s);
+  $("out").innerHTML = rows.map((r, i) => (i === rows.length - 1 && s.index < OAK.run.steps - 2 ? `<span class="fresh">${esc(r)}</span>` : esc(r))).join("\n");
+  $("rows").textContent = `${rows.length} of ${OAK.run.rows} rows printed`;
+}
+const p = player(render, FEATURED);
+$("play").addEventListener("click", () => { p.toggle(); $("play").textContent = p.playing ? "❚❚ Pause" : "▶ Play"; });
+$("prev").addEventListener("click", () => p.step(-1));
+$("next").addEventListener("click", () => p.step(1));
+$("first").addEventListener("click", () => p.go(0));
+scrub.addEventListener("input", () => p.go(Number(scrub.value)));
+document.querySelectorAll(".mtabs [data-v]").forEach((b) => b.addEventListener("click", () => {
+  document.body.dataset.view = b.dataset.v;
+  document.querySelectorAll(".mtabs [data-v]").forEach((q) => q.setAttribute("aria-selected", String(q === b)));
+}));
+</script>
+</body>
+</html>
