@@ -1,0 +1,35 @@
+// Draws a figure with two nested loops: about 13,000 steps to replay.
+// Drag the timeline: the line plot shows the loops, the sawtooth is j.
+
+float n = 10;
+string row = "";
+float y;
+y = -3 * n / 2;
+
+while (y <= n) {
+    row = "";
+    float x;
+    x = -3 * n / 2;
+    while (x <= 3 * n) {
+        float absY;
+        absY = y;
+        float absX;
+        absX = x;
+        if (y < 0) {
+            absY = y * -1;
+        }
+        if (x < 0) {
+            absX = x * -1;
+        }
+        if ((absY + absX < n)
+            || ((-n / 2 - y) * (-n / 2 - y) + (n / 2 - x) * (n / 2 - x) <= n * n / 2)
+            || ((-n / 2 - y) * (-n / 2 - y) + (-n / 2 - x) * (-n / 2 - x) <= n * n / 2)) {
+            row = row + "* ";
+        } else {
+            row = row + ". ";
+        }
+        x = x + 1;
+    }
+    System.out.println(row);
+    y = y + 1;
+}

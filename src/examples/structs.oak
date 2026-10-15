@@ -1,0 +1,29 @@
+// Structs group named fields.
+
+struct Pet {
+    string name;
+}
+
+struct Person {
+    string name;
+    int age;
+    Pet pet;
+}
+
+Person ana = Person{name: "Ana", age: 20, pet: Pet{name: "Rex"}};
+System.out.println(ana.name, "is", ana.age, "and has a pet called", ana.pet.name);
+
+ana.age++;
+ana.pet.name = "Max";
+System.out.println(ana);
+
+// Fields you leave out are null.
+Person luis = Person{name: "Luis"};
+System.out.println(luis.name, luis.age, luis.pet);
+
+// A struct is shared, not copied, when you pass it to a function.
+void birthday(Person p) {
+    p.age++;
+}
+birthday(ana);
+System.out.println(ana.name, "is now", ana.age);

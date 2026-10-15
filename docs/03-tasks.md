@@ -1,6 +1,6 @@
 # 03 — Tasks
 
-> Status: **approved by Henry on 2026-10-15.** T01 to T15 done (Phase 1 complete); T12 implemented, its Worker part waits for T17. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
+> Status: **approved by Henry on 2026-10-15.** T01 to T23 done (Phases 0, 1 and 2 complete); T12 implemented, its Worker part waits for T17. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
 > Estimates are in work sessions (one session = one sitting of focused work), honest and rough.
 
 ## Phase 0 — Safety net (1 session)
@@ -25,14 +25,14 @@
 **Gate:** I show Henry `docs/language-changes.md` (what now prints differently) before Phase 2.
 
 ## Phase 2 — Product (3 sessions)
-- 🟡 **T16 Design directions.** *(Three mockups made: `docs/design/00-directions.md`; waiting for Henry to choose.)* Three static mockups (desktop + 375 px) of the playground, with real data from the diamond sample. *Done when:* Henry picks one (**approval gate b**).
-- **T17 Worker + protocol.** Run, Stop, fresh worker per run. Covers: AC-24, AC-25.
-- **T18 Shell + editor.** CodeMirror with OakLand highlighting, squiggles, `Ctrl/Cmd+Enter`. Covers: AC-26.
-- **T19 Output and Problems panels.** Click-to-jump. Covers: AC-27, AC-28.
-- **T20 AST and Symbols panels.** Covers: AC-29, AC-30.
-- **T21 Trace player.** Step ±, play/pause, speed, reset, current-statement highlight, frames, variable diff, output so far, truncation notice. Covers: AC-31.
-- **T22 Examples menu, open/save file.** Cleaned examples in `src/examples/`. Covers: AC-32.
-- **T23 Responsive and accessibility pass.** Tabs at 375 px, focus order, contrast, axe. Covers: AC-33, AC-34.
+- ✅ **T16 Design directions.** Three mockups (`docs/design/00-directions.md`); Henry chose A (Proof) with B's timeline on 2026-10-15 (`docs/design/01-chosen-direction.md`). Three static mockups (desktop + 375 px) of the playground, with real data from the diamond sample. *Done when:* Henry picks one (**approval gate b**).
+- ✅ **T17 Worker + protocol.** Run, Stop, fresh worker per run. Covers: AC-24, AC-25.
+- ✅ **T18 Shell + editor.** CodeMirror with OakLand highlighting, squiggles, `Ctrl/Cmd+Enter`. Covers: AC-26.
+- ✅ **T19 Output and Problems panels.** Click-to-jump. Covers: AC-27, AC-28.
+- ✅ **T20 AST and Symbols panels.** Covers: AC-29, AC-30.
+- ✅ **T21 Trace player.** Step ±, play/pause, speed, reset, current-statement highlight, frames, variable diff, output so far, truncation notice. Covers: AC-31.
+- ✅ **T22 Examples menu, open/save file.** Cleaned examples in `src/examples/`. Covers: AC-32.
+- ✅ **T23 Responsive and accessibility pass.** Tabs at 375 px, focus order, contrast, axe. Covers: AC-33, AC-34.
 
 ## Phase 3 — Ship (2 sessions)
 - **T24 E2E.** Playwright + axe at 1280 and 375. Covers: AC-25, AC-26…34 (user-visible).

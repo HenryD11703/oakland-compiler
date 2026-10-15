@@ -1,0 +1,31 @@
+// Arrays and matrices.
+
+int[] evens = {2, 4, 6, 8, 10};
+int[] zeros = new int[3];
+System.out.println(evens, zeros);
+
+evens[2] = 60;
+System.out.println("evens[2] =", evens[2], "length =", evens.length);
+System.out.println("index of 8:", evens.indexOf(8), " index of 5:", evens.indexOf(5));
+System.out.println("joined:", evens.join());
+
+// Declaring from another array copies it; assigning shares it.
+int[] copy = evens;
+evens[0] = 99;
+System.out.println("copy[0] =", copy[0], "evens[0] =", evens[0]);
+
+// A matrix is an array of arrays.
+int[][] grid = new int[3][4];
+for (int row = 0; row < 3; row++) {
+    for (int col = 0; col < 4; col++) {
+        grid[row][col] = row * col;
+    }
+}
+System.out.println(grid);
+
+// Sum with a for-each.
+int sum = 0;
+for (int value : evens) {
+    sum += value;
+}
+System.out.println("sum =", sum);

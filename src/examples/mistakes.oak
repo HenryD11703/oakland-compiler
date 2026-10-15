@@ -1,0 +1,22 @@
+// Mistakes do not crash OakLand: each one is reported with its position,
+// and the program keeps going. Look at the Problems tab.
+
+int age = "twenty";                  // a string cannot go in an int
+System.out.println("age is", age);   // so age holds null, and this does not report again
+
+int[] list = {1, 2, 3};
+System.out.println(list[5]);         // index out of range
+
+System.out.println(total + 1);       // total was never declared
+
+int half = 10 / 0;                   // division by zero
+
+int add(int a, int b) {
+    return a + b;
+}
+System.out.println(add(1));          // a missing argument
+System.out.println(add(1, "two"));   // an argument of the wrong type
+
+int count = 1;
+int count = 2;                       // declared twice in the same scope
+System.out.println("done");

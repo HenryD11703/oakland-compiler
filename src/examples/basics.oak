@@ -1,0 +1,31 @@
+// Types, variables and operators.
+
+int count = 10;
+float ratio = 2.5;
+string label = "items";
+char grade = 'A';
+boolean ready = true;
+var inferred = 42;          // the type comes from the value
+
+System.out.println(count, ratio, label, grade, ready, inferred);
+System.out.println(typeof count, typeof ratio, typeof label, typeof grade, typeof ready);
+
+// A variable declared without a value holds null until you assign one.
+int later;
+System.out.println("later is", later);
+later = 7;
+System.out.println("later is now", later);
+
+// int arithmetic is 32-bit and truncates; float arithmetic is decimal.
+System.out.println("7 / 2 =", 7 / 2);
+System.out.println("7.0 / 2 =", 7.0 / 2);
+System.out.println("7 % 3 =", 7 % 3);
+System.out.println("0.1 + 0.2 =", 0.1 + 0.2);
+System.out.println("overflow:", 2147483647 + 1);
+
+// Strings join with anything.
+System.out.println("count = " + count + ", ready = " + ready);
+
+// Comparison and logic.
+System.out.println(count > 5 && ready, count == 10 || false, !ready);
+System.out.println(count % 2 == 0 ? "even" : "odd");

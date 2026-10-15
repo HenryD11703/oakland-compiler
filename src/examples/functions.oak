@@ -1,0 +1,30 @@
+// Functions, recursion and the call stack.
+// Step through factorial(4) and watch the frames pile up in Variables.
+
+int factorial(int n) {
+    if (n == 0) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int fibonacci(int n) {
+    if (n < 2) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+void hanoi(int disks, string from, string via, string to) {
+    if (disks == 1) {
+        System.out.println("move disk 1 from", from, "to", to);
+        return;
+    }
+    hanoi(disks - 1, from, to, via);
+    System.out.println("move disk", disks, "from", from, "to", to);
+    hanoi(disks - 1, via, from, to);
+}
+
+System.out.println("4! =", factorial(4));
+System.out.println("fibonacci(10) =", fibonacci(10));
+hanoi(3, "A", "B", "C");

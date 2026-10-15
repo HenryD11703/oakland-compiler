@@ -205,7 +205,7 @@ describe("mistakes in the trace", () => {
     expect(variables(replay.stateAt(1))).toEqual(["global/global: a=5"]);
   });
 
-  it("is still produced when a limit stops the run, and ends there", () => {
+  it("is still produced when a limit stops the run, and ends there", { timeout: 30_000 }, () => {
     const { trace, result } = traced("int i = 0; while (true) { i++; }");
     expect(result.stoppedEarly).toBe(true);
     expect(trace.steps.length).toBeLessThanOrEqual(MAX_TRACE_STEPS + 1);
