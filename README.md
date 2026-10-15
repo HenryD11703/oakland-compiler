@@ -4,7 +4,7 @@
 
 Write a program, press Run, then drag through its execution: the line being run, every variable, the call stack, the output so far and the syntax tree, at any of up to 20,000 recorded steps. Everything runs in your browser; nothing is sent anywhere.
 
-**Live:** <https://henryd11703.github.io/OLC2_Proyecto1_202004071/>
+**Live:** deployed on Vercel (the link goes here after the first deploy).
 
 ![The playground midway through a run: source with values at the ends of lines, variables, output, and a timeline of the whole run](docs/images/playground.png)
 

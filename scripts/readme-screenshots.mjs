@@ -6,7 +6,7 @@ import { chromium } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const url = process.env.OAKLAND_URL ?? "http://localhost:3100/OLC2_Proyecto1_202004071/";
+const url = process.env.OAKLAND_URL ?? "http://localhost:3100/";
 const out = join(import.meta.dirname, "..", "docs", "images");
 mkdirSync(out, { recursive: true });
 

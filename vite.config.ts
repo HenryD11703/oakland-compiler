@@ -30,11 +30,8 @@ function firstPaint(): Plugin {
   };
 }
 
-// The site is served from https://henryd11703.github.io/OLC2_Proyecto1_202004071/ (GitHub Pages),
-// so production assets live under that path. `npm run dev` serves from "/".
-export default defineConfig(({ command, isPreview }) => ({
-  // `vite preview` serves the production build, so it must use the production base too.
-  base: command === "build" || isPreview ? "/OLC2_Proyecto1_202004071/" : "/",
+// The site is deployed on Vercel at the root of its domain, so the base is "/".
+export default defineConfig(() => ({
   plugins: [react(), firstPaint()],
   build: { target: "es2022" },
   test: {

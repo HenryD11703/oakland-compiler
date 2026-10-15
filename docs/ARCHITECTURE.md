@@ -34,7 +34,7 @@ src/ui/       React + CodeMirror 6; reads the result, never touches the interpre
 | A Web Worker per run, Stop = `terminate()` | the page can never freeze; the limits inside the interpreter give clean diagnostics, `terminate()` is the backstop | running on the main thread in chunks |
 | CodeMirror 6, coloured by the interpreter's own lexer | light (the editor chunk is 99 KB gzipped), works on touch screens, no CDN | Monaco (what the original used: about 5 MB, poor on phones) |
 | Vite + React, plain CSS, fonts bundled | one client-side page; works offline once loaded; nothing leaves the browser | Next.js, Tailwind, Google Fonts |
-| GitHub Pages from an Actions workflow, same URL as before | free, no configuration beyond one switch | Vercel (a new URL for no benefit) |
+| Vercel, from `main` | Henry's other projects are there; no workflow to maintain; the base path is `/` | GitHub Pages (needs a workflow and a path-prefixed base; it was the first plan) |
 
 ## The trace
 

@@ -95,7 +95,7 @@ Syntax is unchanged from the original except where stated. The full reference li
 - **AC-36** `npm audit --omit=dev` reports 0 vulnerabilities; a clean clone builds with `npm ci && npm run build`.
 - **AC-37** CI on GitHub Actions runs lint, types, unit tests, build and E2E on every push.
 - **AC-38** README (English) with screenshots and a live link; `docs/LANGUAGE.md` (reference), `docs/ARCHITECTURE.md`, `CONTRIBUTING.md`, a technical `CLAUDE.md`, and a `LICENSE` file that exists.
-- **AC-39** Deployed as a static site on the same URL as today (GitHub Pages).
+- **AC-39** Deployed as a static site. *(Changed 2026-10-15: on Vercel, at the root of its domain, instead of GitHub Pages; Henry's call.)*
 
 ## Open questions for the approval gate
 1. **[Henry?]** `i++`/`i--` as statements and `for` updates only (AC-06). Alternative: also as expressions.

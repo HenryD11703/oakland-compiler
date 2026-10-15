@@ -7,14 +7,14 @@ export default defineConfig({
   fullyParallel: false,
   workers: 2,
   retries: 0,
-  use: { baseURL: "http://localhost:3100/OLC2_Proyecto1_202004071/", trace: "retain-on-failure" },
+  use: { baseURL: "http://localhost:3100/", trace: "retain-on-failure" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },
     { name: "mobile", use: { ...devices["Pixel 7"], viewport: { width: 375, height: 812 } } },
   ],
   webServer: {
     command: "npm run build && npm run preview",
-    url: "http://localhost:3100/OLC2_Proyecto1_202004071/",
+    url: "http://localhost:3100/",
     reuseExistingServer: false,
     timeout: 120_000,
   },

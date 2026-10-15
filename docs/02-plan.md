@@ -69,8 +69,8 @@ Rejected: *vanilla DOM* (the trace player and panels are state-heavy); *Next sta
 - *Fuzz*: 1,000 seeded mutations (delete/duplicate/swap tokens and lines) of the samples; `run()` must always return, never throw.
 - *E2E* (Playwright + axe, 1280 px and 375 px): run an example, see output, click a problem, step the trace, Stop an infinite loop, keyboard-only path.
 
-**D10 — Deployment: GitHub Pages through a GitHub Actions workflow; Vite `base` set to the repo path. [Henry?]**
-Keeps `https://henryd11703.github.io/OLC2_Proyecto1_202004071/`. Henry has to switch Pages → Source → "GitHub Actions" once in the repo settings.
+**D10 — Deployment: Vercel, straight from `main`; Vite `base` is `/`.** *(Changed 2026-10-15. The plan said GitHub Pages with the repo path; Henry deploys his other projects on Vercel and chose it here too.)*
+No workflow is needed: Vercel builds with `npm run build` and serves `dist`. The old Pages URL keeps serving the original interpreter until Pages is switched off.
 Rejected: *Vercel* (also fine; new URL, no benefit here). *Rename repo to `oakland`* (nicer on a CV, but changes the URL; can be done later).
 
 **D11 — Names and messages in English.** Node kinds, files, diagnostics, UI. The language itself keeps its keywords and its Spanish-named built-in `obtenerLongitudArray`. Old Spanish docs (`Reportes/ManualTecnico.md`, old README) are replaced; the old files stay in git history, and the original program `.txt` files move to `examples/` renamed.

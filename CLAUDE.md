@@ -10,7 +10,7 @@ OakLand, a Java-like language with an interpreter you can watch run (React + Typ
 npm run check          # eslint + tsc + vitest (718 tests, about 7 s). Run before every commit.
 npm test               # vitest only
 npm run test:e2e       # builds, serves on :3100, Playwright (desktop + phone, axe). Needs: npx playwright install chromium
-npm run build          # tsc --noEmit && vite build; production base is /OLC2_Proyecto1_202004071/
+npm run build          # tsc --noEmit && vite build; the site is served from the root (`/`)
 npm run screenshots    # README images; needs `vite preview --port 3100 --strictPort` running
 npm run capture-legacy # regenerates tests/golden/legacy from git commit 11b0e46 (the original interpreter)
 ```
@@ -47,4 +47,4 @@ Update golden snapshots after an intended change: `npx vitest run -u`, then read
 Identity is local to the repository (`git config --local`), `HenryD11703 <3680558330101@ingenieria.usac.edu.gt>`. Never `--global`, never `-c user.*`. Work on a branch (`feat/revamp`), never on `main`. Pushing, opening a PR, tagging, or changing the Pages settings needs the owner's OK each time.
 
 ## Deploy
-`.github/workflows/ci.yml` runs on every push (check, build, audit, E2E). `pages.yml` deploys `dist` to GitHub Pages on a push to `main`, after the owner switches *Settings → Pages → Source → GitHub Actions* once. URL: https://henryd11703.github.io/OLC2_Proyecto1_202004071/
+`.github/workflows/ci.yml` runs on every push (check, build, audit, E2E). The site is deployed by **Vercel** straight from `main` (framework Vite, build `npm run build`, output `dist`; see `vercel.json`); there are no environment variables.
