@@ -1,0 +1,75 @@
+(* OakLand grammar. The parser in src/core/parser/parser.ts implements exactly this.
+   Notation: ISO-style EBNF. `?` optional, `*` zero or more, `|` choice, 'x' a token, UPPER a token class.
+   Whitespace and comments (// to end of line, and a block form) may appear between any two tokens. *)
+
+program        = { declaration } ;
+
+(* ---------- declarations ---------- *)
+declaration    = struct-decl | function-decl | var-decl | statement ;
+
+struct-decl    = 'struct' NAME '{' { field } '}' [ ';' ] ;
+field          = type NAME ';' ;
+
+function-decl  = ( type | 'void' ) NAME '(' [ param { ',' param } ] ')' block ;
+param          = type NAME ;
+
+var-decl       = 'var' NAME '=' expression ';'
+               | type NAME [ '=' initializer ] ';' ;
+initializer    = array-literal | expression ;
+array-literal  = '{' [ initializer { ',' initializer } ] '}' ;
+
+type           = ( 'int' | 'float' | 'string' | 'boolean' | 'char' | NAME ) { '[' ']' } ;
+
+(* ---------- statements ---------- *)
+statement      = block
+               | print
+               | if | while | for | foreach | switch
+               | 'break' ';' | 'continue' ';'
+               | 'return' [ expression ] ';'
+               | update ';'
+               | expression ';' ;
+
+block          = '{' { declaration } '}' ;
+print          = 'System' '.' 'out' '.' 'println' '(' [ expression { ',' expression } ] ')' ';' ;
+if             = 'if' '(' expression ')' statement [ 'else' statement ] ;
+while          = 'while' '(' expression ')' statement ;
+for            = 'for' '(' ( var-decl | expression ';' | ';' ) expression ';' for-update ')' statement ;
+for-update     = update | expression ;
+foreach        = 'for' '(' ( type | 'var' ) NAME ':' expression ')' statement ;
+switch         = 'switch' '(' expression ')' '{' { 'case' expression ':' { declaration } }
+                 [ 'default' ':' { declaration } ] '}' ;
+
+(* ++ and -- exist only as statements and in the for update, never inside another expression *)
+update         = postfix ( '++' | '--' ) ;
+
+(* ---------- expressions, lowest precedence first ---------- *)
+expression     = assignment ;
+assignment     = ternary [ ( '=' | '+=' | '-=' ) assignment ] ;   (* left side must be a variable, element or field *)
+ternary        = or [ '?' expression ':' expression ] ;
+or             = and { '||' and } ;
+and            = equality { '&&' equality } ;
+equality       = relational { ( '==' | '!=' ) relational } ;
+relational     = additive { ( '<' | '<=' | '>' | '>=' ) additive } ;
+additive       = multiplicative { ( '+' | '-' ) multiplicative } ;
+multiplicative = unary { ( '*' | '/' | '%' ) unary } ;
+unary          = ( '-' | '!' | 'typeof' ) unary | postfix ;
+postfix        = primary { '(' [ arguments ] ')' | '[' expression ']' | '.' NAME } ;
+arguments      = expression { ',' expression } ;
+
+primary        = INT | FLOAT | STRING | CHAR | 'true' | 'false' | 'null'
+               | '(' expression ')'
+               | 'new' ( 'int' | 'float' | 'string' | 'boolean' | 'char' | NAME ) '[' expression ']' { '[' expression ']' }
+               | NAME '{' [ field-init { ',' field-init } ] '}'      (* only when NAME is a declared struct *)
+               | NAME ;
+field-init     = NAME ':' expression ;
+
+(* ---------- tokens ---------- *)
+NAME           = letter-or-underscore { letter | digit | '_' } ;      (* never a reserved word on its own *)
+INT            = digit { digit } ;
+FLOAT          = digit { digit } '.' digit { digit } ;
+STRING         = '"' { any-char-but-quote-backslash-newline | escape } '"' ;
+CHAR           = "'" ( any-char-but-quote-backslash-newline | escape ) "'" ;
+escape         = '\' ( 'n' | 't' | 'r' | '0' | 'b' | 'f' | '"' | "'" | '\' ) ;
+
+(* Reserved words: int float string boolean char void var struct if else while for switch case default
+   break continue return new true false null typeof *)

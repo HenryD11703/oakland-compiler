@@ -1,6 +1,6 @@
 # 03 — Tasks
 
-> Status: **approved by Henry on 2026-10-15.** T01 and T02 done. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
+> Status: **approved by Henry on 2026-10-15.** T01 to T06 done. Order matters. Each task has a "done when" and the acceptance criteria (AC) from `01-spec.md` it covers. The table "criterion → test" at the bottom is filled in as tasks close.
 > Estimates are in work sessions (one session = one sitting of focused work), honest and rough.
 
 ## Phase 0 — Safety net (1 session)
@@ -8,10 +8,10 @@
 - ✅ **T02 Characterise the original.** Run the original interpreter on every `Prueba/` program and store stdout + diagnostics as `tests/golden/legacy/*`. *Done when:* the files exist, are committed, and a script regenerates them from commit `11b0e46`. Covers: AC-19.
 
 ## Phase 1 — Core (3–4 sessions)
-- **T03 Spans, diagnostics, tokens.** *Done when:* types exist with unit tests for line/column math. Covers: AC-20.
-- **T04 Grammar + lexer.** Write `grammar.ebnf`, then the lexer (keywords vs names, escapes, both comment styles, positions). *Done when:* all samples tokenise; `trueValue` is one name token. Covers: AC-07.
-- **T05 Parser: expressions.** Pratt parser, precedence from the original, ternary, assignment ops, calls, indexing, `.length/.indexOf/.join`. *Done when:* a table of 60+ expression cases passes, including the diamond's arithmetic.
-- **T06 Parser: statements and declarations.** Variables, arrays, matrices, `if/while/for/foreach/switch`, functions, `++/--`, structs, member access, recovery. *Done when:* all samples parse; a broken-syntax corpus gives positioned, readable errors, up to 10 per run. Covers: AC-06, AC-18 (syntax), AC-20, AC-21.
+- ✅ **T03 Spans, diagnostics, tokens.** *Done when:* types exist with unit tests for line/column math. Covers: AC-20.
+- ✅ **T04 Grammar + lexer.** Write `grammar.ebnf`, then the lexer (keywords vs names, escapes, both comment styles, positions). *Done when:* all samples tokenise; `trueValue` is one name token. Covers: AC-07.
+- ✅ **T05 Parser: expressions.** Pratt parser, precedence from the original, ternary, assignment ops, calls, indexing, `.length/.indexOf/.join`. *Done when:* a table of 60+ expression cases passes, including the diamond's arithmetic.
+- ✅ **T06 Parser: statements and declarations.** Variables, arrays, matrices, `if/while/for/foreach/switch`, functions, `++/--`, structs, member access, recovery. *Done when:* all samples parse; a broken-syntax corpus gives positioned, readable errors, up to 10 per run. Covers: AC-06, AC-18 (syntax), AC-20, AC-21.
 - **T07 Values, types, environments.** Types, typed values, scopes, poison value. *Done when:* unit tests for scope lookup and shadowing.
 - **T08 Interpreter: expressions.** Int/float/string/char/boolean semantics, short-circuit, division by zero. *Done when:* AC-01…05 pass. Covers: AC-01…05.
 - **T09 Interpreter: statements and control flow.** Declarations (incl. `int n;` → null), assignment, blocks, loops, `switch`, completions, misplaced `break/continue/return` diagnostics. Covers: AC-08…12.
