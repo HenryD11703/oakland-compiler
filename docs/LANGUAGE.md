@@ -1,6 +1,6 @@
 # OakLand language reference
 
-OakLand is a small Java-like language: static types, arrays and matrices of any depth, functions, structs. This page describes all of it.
+OakLand is a small Java-like language: static types, arrays and matrices of any depth, functions, structs and classes. This page describes all of it.
 
 **Every example on this page is run by the test suite.** The block marked `output` under an `oak` block is exactly what the program prints; a block marked `problems` lists the diagnostics it produces (`line:column message`). If this page says something false, a test fails. The formal grammar is in [`grammar.ebnf`](grammar.ebnf); what changed from the original interpreter is in [`language-changes.md`](language-changes.md).
 
@@ -42,6 +42,7 @@ done
 | `char` | one character | `'x'` |
 | `T[]`, `T[][]`... | an array, or a matrix, of `T` | `int[] a = {1, 2}` |
 | a struct name | a struct value | `Person p` |
+| a class name | an object of that class, or of a subclass | `Dog d` |
 
 `null` means "no value". Strings accept the escapes `\n`, `\t`, `\r`, `\0`, `\"`, `\'` and `\\`.
 
@@ -506,6 +507,289 @@ System.out.println(c.size);
 4:3 struct 'Box' has no field 'weight'
 ```
 
+## Classes
+
+A class describes a kind of object: the data it holds (its **fields**) and what it can do (its **methods**). `new` creates an object. A class is a type, so `Counter c = new Counter();` declares a variable that holds a `Counter`. Classes are declared at the top level of the program, never inside a function or a block, and like functions and structs they can be used before the line that declares them.
+
+```oak
+class Counter {
+    int count;
+
+    void increment() {
+        count++;
+    }
+
+    int get() {
+        return count;
+    }
+}
+
+Counter c = new Counter();
+c.increment();
+c.increment();
+System.out.println(c.get(), c.count);
+Counter d = c;
+d.increment();
+System.out.println(c.get(), c == d, c == new Counter());
+System.out.println(c, typeof c);
+```
+```output
+2 2
+3 true false
+Counter{count: 3} Counter
+```
+
+An object is shared, like an array or a struct: `d = c` gives a second name to the same object, and `==` asks whether two names are the same object, not whether the fields are equal. Printing an object shows its class and its fields.
+
+### Fields and constructors
+
+A field with no initial value starts at the Java default: `0`, `0.0`, `false`, the character with code 0, and `null` for a string, an array or an object. A **constructor** has the name of its class and no return type; it runs when the object is created. `this` is the object being worked on, and `this.width = width` is how a parameter and a field with the same name are told apart (a parameter hides a field). A class without a constructor gets an empty one. If a class has several constructors, the one with the right number of arguments runs.
+
+```oak
+class Rectangle {
+    float width;
+    float height;
+    string label;
+    Rectangle other;
+
+    Rectangle(float width, float height) {
+        this.width = width;
+        this.height = height;
+    }
+
+    float area() {
+        return width * height;
+    }
+}
+
+Rectangle r = new Rectangle(3.0, 4.0);
+System.out.println(r.area());
+System.out.println(r.label, r.other);
+```
+```output
+12.0
+null null
+```
+
+A field can have an initial value. Initial values run before the body of the constructor.
+
+```oak
+class Tracker {
+    int steps = 10;
+
+    Tracker() {
+        System.out.println("in the constructor, steps =", steps);
+        steps = steps * 2;
+    }
+}
+
+Tracker t = new Tracker();
+System.out.println(t.steps);
+```
+```output
+in the constructor, steps = 10
+20
+```
+
+### Inheritance
+
+`class Dog extends Animal` makes `Dog` a **subclass**: it has every field and method of `Animal` and may add its own. A class has at most one parent. A method with the same name, parameters and return type as one of the parent's **overrides** it. A call goes to the method of the object's real class, whatever type the variable was declared with, and `super.name(...)` calls the parent's version.
+
+```oak
+class Shape {
+    string name() {
+        return "shape";
+    }
+
+    string describe() {
+        return "I am a " + name();
+    }
+}
+
+class Square extends Shape {
+    string name() {
+        return "square";
+    }
+}
+
+class Circle extends Shape {
+    string name() {
+        return "circle";
+    }
+
+    string describe() {
+        return super.describe() + " (round)";
+    }
+}
+
+Shape[] all = {new Shape(), new Square(), new Circle()};
+for (Shape s : all) {
+    System.out.println(s.describe());
+}
+```
+```output
+I am a shape
+I am a square
+I am a circle (round)
+```
+
+Notice that `describe` is written once, in `Shape`, and still prints `square` for a `Square`: the call to `name()` inside it goes to the real class.
+
+An object is built from the top: the parent's constructor runs first, then the initial values of the subclass, then the rest of the subclass's constructor. A constructor starts with `super(...)` to choose the parent's constructor and pass it arguments; without it, the parent's constructor with no arguments runs.
+
+```oak
+class A {
+    A() { System.out.println("A is built"); }
+}
+
+class B extends A {
+    B() { System.out.println("B is built"); }
+}
+
+class C extends B {
+    int n;
+    C(int n) {
+        super();
+        this.n = n;
+        System.out.println("C is built with", n);
+    }
+}
+
+C c = new C(7);
+```
+```output
+A is built
+B is built
+C is built with 7
+```
+
+```oak
+class Person {
+    string name;
+    Person(string name) { this.name = name; }
+}
+
+class Student extends Person {
+    int year;
+    Student(string name, int year) {
+        super(name);
+        this.year = year;
+    }
+}
+
+Student s = new Student("Ana", 2);
+System.out.println(s.name, s.year);
+```
+```output
+Ana 2
+```
+
+### Private members
+
+`private` before a field, a method or a constructor means that only the code of that class may use it, not the code outside and not even a subclass. Without a modifier a member is open (`public` may be written too). A class keeps its data private and lets the outside change it only through methods.
+
+```oak
+class Safe {
+    private int code;
+    int attempts;
+
+    Safe(int code) { this.code = code; }
+
+    boolean open(int guess) {
+        attempts++;
+        return guess == code;
+    }
+}
+
+Safe s = new Safe(1234);
+System.out.println(s.open(1), s.open(1234), s.attempts);
+int peek = s.code;
+s.code = 5;
+```
+```output
+false true 2
+```
+```problems
+15:14 'code' is private in 'Safe'
+16:3 'code' is private in 'Safe'
+```
+
+### Which type counts
+
+A `Dog` can be stored where an `Animal` is expected: in a variable, as an argument, as a returned value or as an element of an array. The other way round is a mistake. What a variable lets you use depends on the type it was **declared** with (an `Animal` variable has no `bark`), and which method runs depends on the object it holds. `null` can be stored in any class variable.
+
+```oak
+class Animal { }
+class Dog extends Animal { void bark() { System.out.println("Woof"); } }
+
+Dog d = new Dog();
+Animal a = d;
+Dog back = a;
+a.bark();
+Animal none = null;
+System.out.println(none == null, a == d);
+```
+```output
+true true
+```
+```problems
+6:12 cannot assign Animal to Dog
+7:3 class 'Animal' has no method 'bark'
+```
+
+Reading a field or calling a method on `null` is a runtime mistake, and the program goes on:
+
+```oak
+class Box { int size; }
+
+Box b = null;
+int s = b.size;
+System.out.println("the program goes on");
+```
+```output
+the program goes on
+```
+```problems
+4:9 cannot read field 'size' of null
+```
+
+### Class mistakes
+
+Every mistake with classes is reported with its position:
+
+```oak
+class Pet {
+    string name;
+    Pet(string name) { this.name = name; }
+    void speak() { System.out.println(name); }
+}
+class Dog extends Pet { }
+class Cat extends Missing { }
+class Bird extends Pet {
+    Bird() { super("tweet", 1); }
+    int speak() { return 1; }
+}
+Pet p = new Pet("Rex");
+p.age = 3;
+p.run();
+Pet q = new Pet();
+```
+```output
+```
+```problems
+6:7 'Dog' must start its constructor with super(...): 'Pet' has no constructor without arguments
+7:19 unknown class 'Missing'
+9:14 'Pet' has no constructor with 2 arguments; it has 1
+10:9 'speak' in 'Bird' overrides 'speak' of 'Pet', so it must have the same parameters and return type: void()
+13:3 class 'Pet' has no field 'age'
+14:3 class 'Pet' has no method 'run'
+15:9 no constructor of 'Pet' takes 0 arguments; it takes 1
+```
+
+### Not in the language
+
+There are no interfaces, abstract classes, `static` members, `protected`, generics, exceptions, or `toString`. Two methods of one class cannot share a name (no overloading), and two constructors cannot take the same number of arguments. A subclass cannot declare a field with the name of one of its parent's.
+
 ## Built-in functions
 
 | Function | Does |
@@ -607,7 +891,7 @@ start
 
 OakLand borrows Java's syntax and arithmetic, but:
 
-- there are no classes, objects, `final`, `static`, `import`, generics, or `String` methods;
+- classes are there, with single inheritance, constructors and `private`, but there are no interfaces, abstract classes, `static`, `protected`, `final`, `import`, generics, exceptions, or `String` methods;
 - `for` needs its condition and update, and `i++` is a statement;
 - a failed assignment leaves `null` in the variable instead of stopping the program;
 - arrays have fixed length, `length` is a member without parentheses, and only `length`, `indexOf` and `join` exist;

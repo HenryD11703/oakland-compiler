@@ -67,3 +67,18 @@ Each row is checked by `tests/unit/golden.test.ts`. "Diagnostics" are the mistak
 | `funciones.oak` | `parsefloat("10")` prints `10.0` instead of `10`; the ten error lines for the five deliberate mistakes are gone from the output | 5 → 5 (116, 117, 129, 143 and 151) |
 
 So on these programs the only changes in what is printed are **float text** and **error lines moving out of the output**. Everything else, including the hand-written expected outputs of the course, matches.
+
+## Stage 2: classes
+
+Added after the rebuild (see `docs/stage-2/`). The seven original programs, the examples of stage 1 and every `golden` file are unchanged: nothing a stage 1 program printed has changed.
+
+| Change | Why |
+|---|---|
+| **New:** `class Name { ... }` with fields, constructors and methods; `new Name(args)`; `this`; `extends`; `super(...)`; `super.method(...)`; `private` and `public`. Classes are declared at the top level only. | Requested by Henry (2026-10-14, syntax like Java, confirmed 2026-10-15). Spec S-01 to S-07. |
+| **New reserved words:** `class`, `extends`, `this`, `super`, `private`, `public`. A name may still *start* with one (`classic`, `thisValue`, `publicity`); one of them alone is no longer a valid name. | A name that is a keyword cannot be told apart from the syntax. No original program used any of them as a name (checked on the seven samples and the examples). |
+| **Fields start at the Java default** (`0`, `0.0`, `false`, the zero character, `null`), so a string field is `null`, not `""`. | Spec S-13. The `""` default of `new string[3]` is unchanged: that is an array of stage 1. |
+| **Objects print like structs:** `Dog{name: Rex, tricks: 3}`, with the fields of the parent first; there is no `toString`. | Reuses the struct display; a `toString` method is out of this stage. |
+| **A call through a variable runs the method of the object's real class;** the variable's declared type decides which fields and methods may be named (`Animal a = new Dog(); a.bark()` is a mistake). `typeof` gives the declared type. | Java's rule, and the one a static checker (stage 2, phase B) can know. |
+| **`==` on objects compares identity,** and between a parent type and a child type is allowed; between unrelated classes it is a mistake. | Java's rule. |
+| **No overloading:** two methods of one class cannot share a name, even with different parameters, and constructors are told apart by their number of arguments only. A subclass cannot declare a field its parent already has. | Keeps the rules small and the compiled code simple (stage 2 plan, S-01 and S-05). |
+| **`super(...)` anywhere but first in a constructor is reported before the program runs,** like a misplaced `break`. | `placement.ts`. |

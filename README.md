@@ -18,7 +18,7 @@ OakLand began as a university project for the compilers course (OLC2, USAC): an 
 - **Read mistakes, not stack traces.** Every problem (syntax, types, names, arguments, bounds, division by zero, runaway loops) is a message with a line and column, underlined in the editor and listed under *Problems*. A bad program never crashes the page.
 - **Look inside.** *Syntax tree* shows how the interpreter parsed the program, *Symbols* lists every name it declares; clicking either jumps to the source.
 - **Arrange the panels.** Drag the dividers (or focus one and use the arrow keys) to give the code, the variables or the output more room; the sizes are remembered. The page is dark.
-- **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Structs, Heart, Mistakes), open a `.oak` file, or save yours.
+- **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Structs, Animals, Bank account, Linked list, Heart, Mistakes), open a `.oak` file, or save yours.
 
 | Mistakes with their positions | A recursive call stack | On a phone (375 px) |
 |---|---|---|
@@ -26,7 +26,7 @@ OakLand began as a university project for the compilers course (OLC2, USAC): an 
 
 ## The language
 
-Static types (`int`, `float`, `string`, `boolean`, `char`, arrays and matrices of any depth, structs), functions with recursion, `if`/`while`/`for`/for-each/`switch`. `int` is 32-bit, floats print like Java, and strings join with anything.
+Static types (`int`, `float`, `string`, `boolean`, `char`, arrays and matrices of any depth, structs), functions with recursion, **classes** (fields, constructors, methods, single inheritance, overriding, `private`), `if`/`while`/`for`/for-each/`switch`. `int` is 32-bit, floats print like Java, and strings join with anything.
 
 ```java
 struct Person { string name; int age; }
@@ -61,7 +61,7 @@ Node 20.19 or newer. Nothing else: no backend, no Docker, no environment variabl
 src/core/       the interpreter: lexer, parser, tree-walking interpreter, trace, symbols. No DOM.
 src/worker/     runs a program in a Web Worker; Stop ends the worker
 src/ui/         React interface, CodeMirror 6 editor, timeline
-src/examples/   the eight example programs (English)
+src/examples/   the eleven example programs (English)
 docs/           principles, spec, plan, tasks, language reference, design notes
 tests/ e2e/     unit, golden, fuzz and documentation tests; Playwright end-to-end tests
 ```
@@ -70,7 +70,7 @@ The design decisions, and the alternatives that were rejected, are in [`docs/ARC
 
 ## Testing
 
-- **718 unit tests**: lexer, parser (with a corpus of syntax errors and their exact positions), every operator and statement, structs, built-ins, limits, the trace and its replay, the symbol table, the timeline data.
+- **About 870 unit tests**: lexer, parser (with a corpus of syntax errors and their exact positions), every operator and statement, structs, classes (objects, inheritance, virtual calls, private, 50 class mistakes), built-ins, limits, the trace and its replay, the symbol table, the timeline data.
 - **Golden files** pin the output of the seven original course programs, and the way it differs from the original interpreter's (`tests/golden/legacy-diff/`). The course's own hand-written expected outputs are checked too.
 - **Fuzzing**: 1,000 mutations of the samples and 500 token soups, seeded, must never make `run()` throw. (A one-off 20,000-case run found no exception.)
 - **48 end-to-end tests** (24 on a desktop and 24 on a phone viewport) with axe accessibility scans of every panel: Stop on a runaway loop, jumping from a problem to its line, stepping by keyboard, opening and saving files.

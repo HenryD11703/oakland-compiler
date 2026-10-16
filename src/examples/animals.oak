@@ -1,0 +1,59 @@
+// Classes and inheritance. A Dog and a Cat are Animals; each one answers in its own way.
+
+class Animal {
+    string name;
+
+    Animal(string name) {
+        this.name = name;
+    }
+
+    string sound() {
+        return "...";
+    }
+
+    void speak() {
+        System.out.println(name, "says", sound());
+    }
+}
+
+class Dog extends Animal {
+    private int tricks;
+
+    Dog(string name, int tricks) {
+        super(name);
+        this.tricks = tricks;
+    }
+
+    string sound() {
+        return "Woof";
+    }
+
+    int getTricks() {
+        return tricks;
+    }
+}
+
+class Cat extends Animal {
+    Cat(string name) {
+        super(name);
+    }
+
+    string sound() {
+        return "Meow";
+    }
+
+    void speak() {
+        super.speak();
+        System.out.println("(purrs)");
+    }
+}
+
+// The variable says Animal; the object decides which speak() and sound() run.
+Animal[] zoo = {new Dog("Rex", 3), new Cat("Tom"), new Animal("Generic")};
+for (Animal a : zoo) {
+    a.speak();
+}
+
+Dog rex = new Dog("Rex", 3);
+System.out.println(rex.name, "knows", rex.getTricks(), "tricks");
+System.out.println(rex);

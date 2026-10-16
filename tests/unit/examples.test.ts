@@ -8,7 +8,7 @@ const byId = (id: string) => (EXAMPLES.find((e) => e.id === id) as (typeof EXAMP
 
 describe("the examples menu (AC-32)", () => {
   it("has the planned examples, each named and described", () => {
-    expect(EXAMPLES.map((e) => e.id)).toEqual(["hello", "basics", "control-flow", "arrays", "functions", "structs", "heart", "mistakes"]);
+    expect(EXAMPLES.map((e) => e.id)).toEqual(["hello", "basics", "control-flow", "arrays", "functions", "structs", "animals", "bank-account", "linked-list", "heart", "mistakes"]);
     for (const example of EXAMPLES) {
       expect(example.title.length).toBeGreaterThan(0);
       expect(example.blurb.length).toBeGreaterThan(10);
@@ -43,6 +43,28 @@ describe("the examples menu (AC-32)", () => {
 
   it("structs prints the shared change", () => {
     expect(run(byId("structs")).stdout).toContain("Ana is now 22");
+  });
+
+  it("animals lets each object answer in its own way", () => {
+    expect(run(byId("animals")).stdout.split("\n").slice(0, 4)).toEqual(["Rex says Woof", "Tom says Meow", "(purrs)", "Generic says ..."]);
+  });
+
+  it("bank-account keeps the balance private and shows the interest", () => {
+    const out = run(byId("bank-account")).stdout;
+    expect(out).toContain("Ana has 120.0");
+    expect(out).toContain("Luis has 1050.0");
+  });
+
+  it("the private-balance line of bank-account, uncommented, is the mistake it says it is", () => {
+    const source = byId("bank-account").replace("// System.out.println(plain.balance);", "System.out.println(plain.balance);");
+    expect(run(source).diagnostics.map((d) => d.message)).toEqual(["'balance' is private in 'Account'"]);
+  });
+
+  it("linked-list builds, sums and reverses", () => {
+    const out = run(byId("linked-list")).stdout;
+    expect(out).toContain("1 4 9 16 25");
+    expect(out).toContain("size 5 sum 55");
+    expect(out).toContain("25 16 9 4 1");
   });
 
   it("heart draws the same figure as the original sample program", () => {

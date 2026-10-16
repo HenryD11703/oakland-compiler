@@ -36,14 +36,37 @@ for (int v : xs) { switch (v) { case 2: System.out.println("two"); break; defaul
 int k = 0; while (k < 3) { k++; if (k == 2) { continue; } System.out.println(s, k, xs.indexOf(3), xs.join()); }
 boolean ok = k > 2 && !(f < 1) || p == null; System.out.println(ok ? "yes" : "no", typeof m, parseInt("12"), toUpperCase(s));
 `;
+const CLASS_FEATURES = `
+class Animal {
+    string name; private int age = 3;
+    Animal(string name) { this.name = name; }
+    string sound() { return "..."; }
+    int years() { return age; }
+    void speak() { System.out.println(name, sound(), years()); }
+}
+class Dog extends Animal {
+    Animal friend; int[] marks = {1, 2};
+    Dog(string name) { super(name); friend = null; }
+    string sound() { return "Woof"; }
+    void speak() { super.speak(); if (friend != null) { friend.speak(); } marks[0]++; }
+}
+Animal a = new Dog("Rex"); Dog d = new Dog("Fido"); d.friend = a;
+Animal[] zoo = {a, d, new Animal("Generic"), null};
+for (Animal z : zoo) { if (z != null) { z.speak(); } }
+System.out.println(d.marks, d.friend == a, typeof d, d);
+`;
+const examples = join(import.meta.dirname, "..", "..", "src", "examples");
 const BASES: string[] = [
   ...readdirSync(fixtures).sort().map((file) => readFileSync(join(fixtures, file), "utf8")),
   FEATURES,
+  CLASS_FEATURES,
+  ...["animals.oak", "bank-account.oak", "linked-list.oak"].map((file) => readFileSync(join(examples, file), "utf8")),
 ];
 
 const WORDS = [
   "int", "float", "string", "boolean", "char", "void", "var", "struct", "if", "else", "while", "for", "switch", "case", "default",
   "break", "continue", "return", "new", "true", "false", "null", "typeof", "System", "out", "println", "length", "indexOf", "join",
+  "class", "extends", "this", "super", "private", "public", "Animal", "Dog", "speak", "name",
   "parseInt", "toString", "x", "y", "i", "arr", "p", "Person", "f", "0", "1", "7", "2147483647", "3.5", '"s"', "'c'",
 ];
 const PUNCT = ["(", ")", "[", "]", "{", "}", ",", ";", ":", "?", ".", "+", "-", "*", "/", "%", "<", ">", "=", "!", "==", "!=", "<=", ">=", "&&", "||", "++", "--", "+=", "-="];

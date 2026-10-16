@@ -1,0 +1,59 @@
+// A class keeps its data private and lets the outside change it only through methods.
+
+class Account {
+    string owner;
+    private float balance;
+
+    Account(string owner, float opening) {
+        this.owner = owner;
+        balance = opening;
+    }
+
+    float getBalance() {
+        return balance;
+    }
+
+    void deposit(float amount) {
+        if (amount > 0) {
+            balance += amount;
+        }
+    }
+
+    boolean withdraw(float amount) {
+        if (amount > balance) {
+            return false;
+        }
+        balance -= amount;
+        return true;
+    }
+
+    void describe() {
+        System.out.println(owner, "has", balance);
+    }
+}
+
+class SavingsAccount extends Account {
+    float rate;
+
+    SavingsAccount(string owner, float opening, float rate) {
+        super(owner, opening);
+        this.rate = rate;
+    }
+
+    void addInterest() {
+        deposit(getBalance() * rate);
+    }
+}
+
+Account plain = new Account("Ana", 100.0);
+plain.deposit(50.0);
+System.out.println(plain.withdraw(500.0));   // false: not enough money
+System.out.println(plain.withdraw(30.0));    // true
+plain.describe();
+
+SavingsAccount savings = new SavingsAccount("Luis", 1000.0, 0.05);
+savings.addInterest();
+savings.describe();
+
+// Uncomment the next line to see the mistake: balance is private.
+// System.out.println(plain.balance);

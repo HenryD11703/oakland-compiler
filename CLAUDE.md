@@ -7,7 +7,7 @@ OakLand, a Java-like language with an interpreter you can watch run (React + Typ
 
 ## Commands
 ```bash
-npm run check          # eslint + tsc + vitest (718 tests, about 7 s). Run before every commit.
+npm run check          # eslint + tsc + vitest (about 870 tests, about 10 s). Run before every commit.
 npm test               # vitest only
 npm run test:e2e       # builds, serves on :3100, Playwright (desktop + phone, axe). Needs: npx playwright install chromium
 npm run build          # tsc --noEmit && vite build; the site is served from the root (`/`)
@@ -17,7 +17,7 @@ npm run capture-legacy # regenerates tests/golden/legacy from git commit 11b0e46
 Update golden snapshots after an intended change: `npx vitest run -u`, then read the diff.
 
 ## Map
-- `src/core/` the interpreter. **No DOM**: lexer, parser (`parser/ast.ts` is the AST), `interpreter/` (values, environment, builtins, limits, placement), `trace/` (recorder, replay, series), `symbols.ts`, `astView.ts`, `run.ts` (the one entry point).
+- `src/core/` the interpreter. **No DOM**: lexer, parser (`parser/ast.ts` is the AST; classes are `ClassDecl`), `interpreter/` (values, environment, builtins, limits, placement; classes, objects and virtual calls live in `interpreter.ts`: `declareClasses`, `construct`, `callMethod`), `trace/` (recorder, replay, series), `symbols.ts`, `astView.ts`, `run.ts` (the one entry point).
 - `src/worker/` protocol, handler (pure, tested), worker, client (Stop, hard timeout).
 - `src/ui/` `App.tsx` (state and layout), `Editor.tsx` (CodeMirror), `Timeline.tsx` + `timelineData.ts`, `Panels.tsx`, `inlineValues.ts`, `styles.css`.
 - `tests/unit`, `tests/golden` (`legacy/` original output, `current/` snapshots, `legacy-diff/`), `tests/fixtures/prueba` (the seven original programs, never edit), `tests/fuzz`, `tests/docs`; `e2e/`.
