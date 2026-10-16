@@ -85,6 +85,8 @@ export interface InterpretOptions {
   readonly now?: () => number;
   /** Record the trace (default true). */
   readonly trace?: boolean;
+  /** The static type of each expression, from the checker. Used where a run needs it: the type of `a ? b : c`. */
+  readonly typeHints?: ReadonlyMap<Expression, string>;
 }
 
 /** The statements that make a step of their own in the trace. */
@@ -135,7 +137,7 @@ function numberOf(value: Value): number {
 
 /** Runs a parsed program. Never throws: problems become diagnostics. */
 export function interpret(program: Program, options: InterpretOptions = {}): InterpretResult {
-  return new Interpreter({ ...DEFAULT_LIMITS, ...options.limits }, options.now ?? Date.now, options.trace ?? true).run(program);
+  return new Interpreter({ ...DEFAULT_LIMITS, ...options.limits }, options.now ?? Date.now, options.trace ?? true, options.typeHints ?? null).run(program);
 }
 
 class Interpreter {
@@ -169,6 +171,7 @@ class Interpreter {
     private readonly limits: RunLimits,
     private readonly now: () => number,
     traceEnabled: boolean,
+    private readonly hints: ReadonlyMap<Expression, string> | null,
   ) {
     this.startedAt = now();
     this.trace = traceEnabled ? new TraceRecorder(this.global) : null;
@@ -1063,7 +1066,13 @@ class Interpreter {
   private evalTernary(node: Ternary, env: Environment): Value {
     const condition = this.evalCondition(node.condition, env);
     if (condition === null) return ERROR;
-    return this.evaluate(condition ? node.whenTrue : node.whenFalse, env);
+    const value = this.evaluate(condition ? node.whenTrue : node.whenFalse, env);
+    // `a ? b : c` has one type, whichever side is chosen: `true ? 1 : 2.5` is the float 1.0 (spec S-14).
+    const unified = this.hints?.get(node);
+    if (unified === undefined || isError(value) || value.value === null) return value;
+    if (unified === "float" && (value.type === "int" || value.type === "char")) return { type: "float", value: numberOf(value) };
+    if (unified === "int" && value.type === "char") return int(numberOf(value));
+    return value;
   }
 
   private evalAssign(node: Assign, env: Environment): Value {
@@ -1385,9 +1394,12 @@ class Interpreter {
       }
 
       if (ok) {
+        // An initial value sees `this` and the names outside the class, not the parameters of the constructor.
+        const initScope = new Environment(this.global, scope.label);
+        initScope.declare(self);
         for (const info of cls.fields) {
           if (info.owner !== cls || info.init === null) continue;
-          const value = this.evalInitializer(info.init, info.type, scope);
+          const value = this.evalInitializer(info.init, info.type, initScope);
           if (isError(value)) continue;
           if (!this.assignable(value.type, info.type)) {
             this.semantic(info.init.span, `cannot assign ${value.type} to the field '${info.name}' of type ${info.type}`);

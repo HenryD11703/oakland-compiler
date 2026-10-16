@@ -1,6 +1,6 @@
 # Stage 2 — Tasks
 
-> Status: **approved by Henry on 2026-10-15** (gate a). T30, T31 and **Phase A (T32 to T37)** are done; the rest is not started. Numbering continues from `docs/03-tasks.md` (T01 to T28). Order matters. Each task has a "done when" and the criteria (S-xx) from `01-spec.md` it covers. Estimates are in work sessions (one sitting of focused work) and are honest and rough: **about 24 to 30 sessions in all**, and the plan says what to cut if that is too much.
+> Status: **approved by Henry on 2026-10-15** (gate a). T30, T31, **Phase A (T32 to T37)** and **Phase B (T38 to T42)** are done; the rest is not started. Numbering continues from `docs/03-tasks.md` (T01 to T28). Order matters. Each task has a "done when" and the criteria (S-xx) from `01-spec.md` it covers. Estimates are in work sessions (one sitting of focused work) and are honest and rough: **about 24 to 30 sessions in all**, and the plan says what to cut if that is too much.
 
 ## Phase 0 — Before any code (1 session)
 - ✅ **T30 Baseline and benchmarks.** Write `npm run bench` with the four programs of S-22 and run it against the interpreter as it is today, with and without the trace. *Done when:* a table with the Node version, the CPU and the medians of five runs is committed. Covers: S-22 (the "before" half). It also answers the open question of stage 1: how much of the 4.8 s on the million-iteration loop is the trace.
@@ -17,11 +17,11 @@
 **Gate:** I show Henry `docs/language-changes.md` and the class examples before Phase B.
 
 ## Phase B — The static checker (4 sessions)
-- **T38 Types and the class table.** One shared type module; the table of classes, fields, methods, parents, with cycle and duplicate detection. *Done when:* unit tests for assignability including subclasses and `null`.
-- **T39 Expressions.** A static type for every expression, widening, strings, the ternary rule, calls, members, `new`. *Done when:* a table of 100+ expression cases gives the types Java gives. Covers: S-12, S-14.
-- **T40 Statements and flow.** Declarations, `var`, assignments, loops, `switch`, returns (every path returns), `break`/`continue` placement, definite assignment. *Done when:* the stage 1 error samples give the same messages as the interpreter's. Covers: S-12, S-13.
-- **T41 Class rules.** Overrides, `super(...)`, `private`, constructor arity, `this` placement. *Done when:* every diagnostic of S-09 is produced with a position. Covers: S-09, S-12.
-- **T42 Agreement with the interpreter.** For the whole corpus: if the checker is clean the interpreter reports no type diagnostic; if the interpreter reports one, the checker reports it too. *Done when:* the test passes and the few intended differences are listed. Covers: S-15.
+- ✅ **T38 Types and the class table.** One shared type module; the table of classes, fields, methods, parents, with cycle and duplicate detection. *Done when:* unit tests for assignability including subclasses and `null`.
+- ✅ **T39 Expressions.** A static type for every expression, widening, strings, the ternary rule, calls, members, `new`. *Done when:* a table of 100+ expression cases gives the types Java gives. Covers: S-12, S-14.
+- ✅ **T40 Statements and flow.** Declarations, `var`, assignments, loops, `switch`, returns (every path returns), `break`/`continue` placement, definite assignment. *Done when:* the stage 1 error samples give the same messages as the interpreter's. Covers: S-12, S-13.
+- ✅ **T41 Class rules.** Overrides, `super(...)`, `private`, constructor arity, `this` placement. *Done when:* every diagnostic of S-09 is produced with a position. Covers: S-09, S-12.
+- ✅ **T42 Agreement with the interpreter.** For the whole corpus: if the checker is clean the interpreter reports no type diagnostic; if the interpreter reports one, the checker reports it too. *Done when:* the test passes and the few intended differences are listed. Covers: S-15.
 
 ## Phase C — The compiler (8 sessions, in vertical slices)
 - **T43 IR and binary encoder.** The IR types; LEB128; type, import, function, table, memory, global, export, element, code and data sections. *Done when:* a module built by hand in a test (`add(a, b)`) passes `WebAssembly.validate` and returns the right value in Node. Covers: S-16, S-21.

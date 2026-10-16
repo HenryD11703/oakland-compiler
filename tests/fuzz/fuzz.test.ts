@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { check } from "../../src/core/check/check";
 import { tokenize } from "../../src/core/lexer/lexer";
+import { parse } from "../../src/core/parser/parser";
 import { run } from "../../src/core/run";
 import { MAX_TRACE_STEPS } from "../../src/core/trace/types";
 
@@ -179,6 +181,17 @@ function checkSound(source: string, label: string): void {
   // A program with a syntax or lexical error never runs; one that ran has none.
   const broken = result.diagnostics.some((d) => d.phase === "lexical" || d.phase === "syntax");
   expect(result.ran, where).toBe(!broken);
+
+  // The type checker is held to the same rule: it never throws, and a bug of its own never shows up as a diagnostic.
+  const parsed = parse(source);
+  if (parsed.diagnostics.length === 0) {
+    const checked = check(parsed.program);
+    for (const d of checked.diagnostics) {
+      expect(d.message.startsWith("internal error"), `${d.message}\n${where}`).toBe(false);
+      expect(d.span.start.offset, where).toBeGreaterThanOrEqual(0);
+      expect(d.span.end.offset, where).toBeLessThanOrEqual(source.length);
+    }
+  }
 }
 
 describe("fuzzing (AC-23)", () => {

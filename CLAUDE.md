@@ -17,7 +17,7 @@ npm run capture-legacy # regenerates tests/golden/legacy from git commit 11b0e46
 Update golden snapshots after an intended change: `npx vitest run -u`, then read the diff.
 
 ## Map
-- `src/core/` the interpreter. **No DOM**: lexer, parser (`parser/ast.ts` is the AST; classes are `ClassDecl`), `interpreter/` (values, environment, builtins, limits, placement; classes, objects and virtual calls live in `interpreter.ts`: `declareClasses`, `construct`, `callMethod`), `trace/` (recorder, replay, series), `symbols.ts`, `astView.ts`, `run.ts` (the one entry point).
+- `src/core/` the interpreter. **No DOM**: lexer, parser (`parser/ast.ts` is the AST; classes are `ClassDecl`), `interpreter/` (values, environment, builtins, limits, placement; classes, objects and virtual calls live in `interpreter.ts`: `declareClasses`, `construct`, `callMethod`), `trace/` (recorder, replay, series), `classes.ts` (the class table shared by the interpreter and the checker), `check/` (the static type checker: `check(program)` types every expression and finds mistakes without running; used by Compile mode and, for the type of `a ? b : c`, by the interpreter), `types.ts`, `symbols.ts`, `astView.ts`, `run.ts` (the one entry point).
 - `src/worker/` protocol, handler (pure, tested), worker, client (Stop, hard timeout).
 - `src/ui/` `App.tsx` (state and layout), `Editor.tsx` (CodeMirror), `Timeline.tsx` + `timelineData.ts`, `Panels.tsx`, `inlineValues.ts`, `styles.css`.
 - `tests/unit`, `tests/golden` (`legacy/` original output, `current/` snapshots, `legacy-diff/`), `tests/fixtures/prueba` (the seven original programs, never edit), `tests/fuzz`, `tests/docs`; `e2e/`.

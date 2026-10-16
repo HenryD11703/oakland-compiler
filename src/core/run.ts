@@ -1,4 +1,5 @@
 import { toAstView, type AstNode } from "./astView";
+import { check } from "./check/check";
 import { compareDiagnostics, diagnostic, type Diagnostic } from "./diagnostics";
 import { interpret } from "./interpreter/interpreter";
 import type { RunLimits } from "./interpreter/limits";
@@ -70,6 +71,7 @@ function runUnguarded(source: string, options: RunOptions): RunResult {
   }
   const misplaced = checkPlacement(parsed.program);
   const result = interpret(parsed.program, {
+    typeHints: check(parsed.program).types,
     ...(options.limits ? { limits: options.limits } : {}),
     ...(options.now ? { now: options.now } : {}),
     ...(options.trace !== undefined ? { trace: options.trace } : {}),

@@ -48,7 +48,7 @@ Everything here is a difference between OakLand as the original interpreter (com
 ### Unchanged on purpose
 - `System.out.println(a, b)` separates arguments with one space.
 - `int[] b = a;` **copies** the array (the sample says "por copia"); `b = a;` and passing an array to a function **share** it.
-- `ternary` takes the type of the branch it chooses (`true ? 1 : 2.5` is the int `1`).
+- ~~`ternary` takes the type of the branch it chooses.~~ Changed in stage 2: see the table at the end (S-14).
 - `time()` returns an ISO date-time string.
 - Variables, functions and structs share one namespace per scope; a redeclared name keeps the first.
 
@@ -81,4 +81,5 @@ Added after the rebuild (see `docs/stage-2/`). The seven original programs, the 
 | **A call through a variable runs the method of the object's real class;** the variable's declared type decides which fields and methods may be named (`Animal a = new Dog(); a.bark()` is a mistake). `typeof` gives the declared type. | Java's rule, and the one a static checker (stage 2, phase B) can know. |
 | **`==` on objects compares identity,** and between a parent type and a child type is allowed; between unrelated classes it is a mistake. | Java's rule. |
 | **No overloading:** two methods of one class cannot share a name, even with different parameters, and constructors are told apart by their number of arguments only. A subclass cannot declare a field its parent already has. | Keeps the rules small and the compiled code simple (stage 2 plan, S-01 and S-05). |
+| **`a ? b : c` has one type, whichever side is chosen:** the two sides must have the same type, or be numbers (then it is `float` if either is, else `int`; a `char` next to an `int` is an `int`), or be `null` and a reference type, or a class and its parent. `true ? 1 : 2.5` is now the float `1.0` (it was the int `1`), and `true ? 'a' : 1` is the int `97`. Two sides of unrelated types are a mistake in the checker. | Spec S-14: a compiler cannot know which side will run, so the type cannot depend on it. |
 | **`super(...)` anywhere but first in a constructor is reported before the program runs,** like a misplaced `break`. | `placement.ts`. |

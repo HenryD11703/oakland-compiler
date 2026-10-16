@@ -7,6 +7,8 @@ export type { Token, TokenType } from "./lexer/tokens";
 export type * as Ast from "./parser/ast";
 export { MAX_NESTING, MAX_SYNTAX_ERRORS, parse } from "./parser/parser";
 export type { ParseResult } from "./parser/parser";
+export { check } from "./check/check";
+export type { CheckResult } from "./check/check";
 export { run } from "./run";
 export type { RunOptions, RunResult } from "./run";
 export type { AstNode } from "./astView";
