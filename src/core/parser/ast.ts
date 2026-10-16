@@ -122,6 +122,34 @@ export interface StructLiteral {
   readonly span: Span;
 }
 
+/** `this`: the object a method or constructor is working on. */
+export interface This {
+  readonly kind: "This";
+  readonly span: Span;
+}
+
+/** `super` as the object of `super.speak()`. It is only valid in that position. */
+export interface Super {
+  readonly kind: "Super";
+  readonly span: Span;
+}
+
+/** `super(args)`: the parent's constructor. Only valid as the first statement of a constructor. */
+export interface SuperCall {
+  readonly kind: "SuperCall";
+  readonly args: readonly Expression[];
+  readonly span: Span;
+}
+
+/** `new Dog("Rex", 3)` */
+export interface NewObject {
+  readonly kind: "NewObject";
+  readonly className: string;
+  readonly classSpan: Span;
+  readonly args: readonly Expression[];
+  readonly span: Span;
+}
+
 export type Expression =
   | Literal
   | Identifier
@@ -134,7 +162,11 @@ export type Expression =
   | Index
   | Member
   | NewArray
-  | StructLiteral;
+  | StructLiteral
+  | This
+  | Super
+  | SuperCall
+  | NewObject;
 
 export type Initializer = Expression | ArrayLiteral;
 
@@ -276,6 +308,55 @@ export interface StructDecl {
   readonly span: Span;
 }
 
+export type Access = "public" | "private";
+
+/** `private int tricks;` `string name = "x";` A field with no initial value starts at the Java default. */
+export interface ClassField {
+  readonly kind: "ClassField";
+  readonly access: Access;
+  readonly type: TypeRef;
+  readonly name: string;
+  readonly nameSpan: Span;
+  readonly init: Initializer | null;
+  readonly span: Span;
+}
+
+export interface MethodDecl {
+  readonly kind: "MethodDecl";
+  readonly access: Access;
+  readonly returnType: TypeRef;
+  readonly name: string;
+  readonly nameSpan: Span;
+  readonly params: readonly Param[];
+  readonly body: Block;
+  readonly span: Span;
+}
+
+/** `Dog(string name) { ... }` A constructor has the name of its class and no return type. */
+export interface CtorDecl {
+  readonly kind: "CtorDecl";
+  readonly access: Access;
+  readonly name: string;
+  readonly nameSpan: Span;
+  readonly params: readonly Param[];
+  readonly body: Block;
+  readonly span: Span;
+}
+
+export type ClassMember = ClassField | MethodDecl | CtorDecl;
+
+/** `class Dog extends Animal { ... }` Classes are declared at the top level of the program. */
+export interface ClassDecl {
+  readonly kind: "ClassDecl";
+  readonly name: string;
+  readonly nameSpan: Span;
+  /** The parent class named after `extends`, or null. */
+  readonly superName: string | null;
+  readonly superSpan: Span | null;
+  readonly members: readonly ClassMember[];
+  readonly span: Span;
+}
+
 export type Statement =
   | Block
   | ExprStmt
@@ -291,7 +372,8 @@ export type Statement =
   | Return
   | VarDecl
   | FuncDecl
-  | StructDecl;
+  | StructDecl
+  | ClassDecl;
 
 export interface Program {
   readonly kind: "Program";
@@ -299,4 +381,4 @@ export interface Program {
   readonly span: Span;
 }
 
-export type Node = Program | Statement | Expression | ArrayLiteral | TypeRef;
+export type Node = Program | Statement | Expression | ArrayLiteral | TypeRef | ClassMember;

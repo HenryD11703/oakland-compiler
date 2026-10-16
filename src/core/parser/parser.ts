@@ -3,16 +3,22 @@ import { tokenize } from "../lexer/lexer";
 import { describeToken, isKeyword, isPunct, PRIMITIVE_TYPES, type Token } from "../lexer/tokens";
 import { endOf, joinSpans, type Span } from "../span";
 import type {
+  Access,
   ArrayLiteral,
   AssignOp,
   BinaryOp,
   Block,
+  ClassDecl,
+  ClassField,
+  ClassMember,
+  CtorDecl,
   Expression,
   FieldDecl,
   FieldInit,
   FuncDecl,
   Initializer,
   LValue,
+  MethodDecl,
   Param,
   Program,
   Statement,
@@ -64,7 +70,7 @@ const BINARY_PRECEDENCE: Readonly<Record<string, number>> = {
 
 /** After a syntax error the parser skips ahead to a `;`, a `}` or one of these words. */
 const RESYNC_KEYWORDS: ReadonlySet<string> = new Set([
-  "if", "while", "for", "switch", "return", "break", "continue", "struct", "case", "default",
+  "if", "while", "for", "switch", "return", "break", "continue", "struct", "class", "private", "public", "case", "default",
   "int", "float", "string", "boolean", "char", "var", "void",
 ]);
 
@@ -88,6 +94,8 @@ class Parser {
   private readonly structNames = new Set<string>();
   private stopped = false;
   private nesting = 0;
+  /** How many statement lists (blocks, function bodies, switch cases) the parser is inside; 0 at the top level. */
+  private listDepth = 0;
   truncated = false;
 
   constructor(private readonly tokens: readonly Token[]) {
@@ -217,13 +225,18 @@ class Parser {
 
   private parseStatements(isEnd: () => boolean): Statement[] {
     const statements: Statement[] = [];
-    while (!this.atEof() && !isEnd() && !this.stopped) {
-      const start = this.pos;
-      try {
-        statements.push(this.parseDeclaration());
-      } catch (error) {
-        this.recover(error, start);
+    this.listDepth++;
+    try {
+      while (!this.atEof() && !isEnd() && !this.stopped) {
+        const start = this.pos;
+        try {
+          statements.push(this.parseDeclaration());
+        } catch (error) {
+          this.recover(error, start);
+        }
       }
+    } finally {
+      this.listDepth--;
     }
     return statements;
   }
@@ -242,6 +255,7 @@ class Parser {
     const token = this.peek();
     if (isPunct(token, "}")) this.failAt(token.span, "unexpected '}': there is no open block to close");
     if (isKeyword(token, "struct")) return this.parseStruct();
+    if (isKeyword(token, "class")) return this.parseClass();
     if (this.isTypeStart()) return this.parseTypedDeclaration();
     return this.parseStatement();
   }
@@ -309,7 +323,8 @@ class Parser {
     };
   }
 
-  private parseFunction(returnType: TypeRef, name: Token): FuncDecl {
+  /** `(int a, string b)`, starting at the opening parenthesis. */
+  private parseParams(): Param[] {
     this.advance(); // (
     const params: Param[] = [];
     if (!this.atPunct(")")) {
@@ -323,6 +338,11 @@ class Parser {
       } while (this.matchPunct(","));
     }
     this.expectPunct(")", "to close the parameter list");
+    return params;
+  }
+
+  private parseFunction(returnType: TypeRef, name: Token): FuncDecl {
+    const params = this.parseParams();
     if (!this.atPunct("{")) this.failMissing(`expected '{' to start the body of '${name.text}'`);
     const body = this.parseBlock();
     return {
@@ -355,6 +375,81 @@ class Parser {
     return { kind: "StructDecl", name: name.text, nameSpan: name.span, fields, span: joinSpans(keyword.span, end.span) };
   }
 
+  // ---------- classes ----------
+
+  private parseClass(): ClassDecl {
+    const keyword = this.advance();
+    if (this.listDepth > 0) this.failAt(keyword.span, "a class can only be declared at the top level of the program, not inside a block or a function");
+    const name = this.expectName("after 'class'");
+    let superName: string | null = null;
+    let superSpan: Span | null = null;
+    if (this.atKeyword("extends")) {
+      this.advance();
+      const parent = this.expectName("after 'extends'");
+      superName = parent.text;
+      superSpan = parent.span;
+    }
+    if (!this.atPunct("{")) this.failMissing(`expected '{' to start the body of class '${name.text}'`);
+    const open = this.advance();
+    const members: ClassMember[] = [];
+    while (!this.atPunct("}") && !this.atEof() && !this.stopped) {
+      const start = this.pos;
+      try {
+        members.push(this.parseMember(name.text));
+      } catch (error) {
+        this.recover(error, start);
+      }
+    }
+    if (!this.atPunct("}")) this.failMissing(`expected '}' to close the class '${name.text}' opened on line ${open.span.start.line}`);
+    const close = this.advance();
+    return { kind: "ClassDecl", name: name.text, nameSpan: name.span, superName, superSpan, members, span: joinSpans(keyword.span, close.span) };
+  }
+
+  private parseMember(className: string): ClassMember {
+    const first = this.peek();
+    let access: Access = "public";
+    if (isKeyword(first, "private") || isKeyword(first, "public")) {
+      access = first.text as Access;
+      this.advance();
+    }
+    const start = this.peek();
+
+    // `Dog(...) { }` is the constructor of class Dog.
+    if (start.type === "identifier" && this.atPunct("(", 1)) {
+      if (start.text !== className) {
+        this.failAt(start.span, `'${start.text}(...)' has no return type; a constructor must have the name of its class, '${className}'`);
+      }
+      this.advance();
+      const params = this.parseParams();
+      if (!this.atPunct("{")) this.failMissing(`expected '{' to start the body of the constructor of '${className}'`);
+      const body = this.parseBlock();
+      const ctor: CtorDecl = { kind: "CtorDecl", access, name: start.text, nameSpan: start.span, params, body, span: joinSpans(first.span, body.span) };
+      return ctor;
+    }
+
+    const isType = (start.type === "keyword" && (PRIMITIVE_TYPES.has(start.text) || start.text === "void")) || start.type === "identifier";
+    if (!isType) {
+      if (isKeyword(start, "var")) this.failAt(start.span, "'var' cannot be used for a field; write its type");
+      this.failAt(start.span, `expected a field, a method or a constructor inside the class, but found ${describeToken(start)}`);
+    }
+    const type = this.parseType();
+    const name = this.expectName("after the type");
+
+    if (this.atPunct("(")) {
+      const params = this.parseParams();
+      if (!this.atPunct("{")) this.failMissing(`expected '{' to start the body of '${name.text}'`);
+      const body = this.parseBlock();
+      const method: MethodDecl = { kind: "MethodDecl", access, returnType: type, name: name.text, nameSpan: name.span, params, body, span: joinSpans(first.span, body.span) };
+      return method;
+    }
+
+    if (type.name === "void") this.failAt(type.span, "a field cannot have the type 'void'");
+    const init = this.matchPunct("=") ? this.parseInitializer() : null;
+    const semicolon = this.expectPunct(";", "after the field");
+    const field: ClassField = { kind: "ClassField", access, type, name: name.text, nameSpan: name.span, init, span: joinSpans(first.span, semicolon.span) };
+    return field;
+  }
+
   private parseInitializer(): Initializer {
     return this.atPunct("{") ? this.parseArrayLiteral() : this.parseExpression();
   }
@@ -376,7 +471,7 @@ class Parser {
   /** The body of `if`, `else`, `while` and `for`: any statement except a declaration. */
   private parseBody(): Statement {
     const token = this.peek();
-    if (this.isTypeStart() || isKeyword(token, "struct")) {
+    if (this.isTypeStart() || isKeyword(token, "struct") || isKeyword(token, "class")) {
       this.failAt(token.span, "a declaration is not allowed here; put it inside { }");
     }
     return this.parseStatement();
@@ -736,6 +831,11 @@ class Parser {
           return { kind: "Literal", literalType: "null", value: null, span: token.span };
         }
         if (token.text === "new") return this.parseNew();
+        if (token.text === "this") {
+          this.advance();
+          return { kind: "This", span: token.span };
+        }
+        if (token.text === "super") return this.parseSuper();
         break;
       case "identifier":
         if (this.structNames.has(token.text) && this.atPunct("{", 1)) return this.parseStructLiteral();
@@ -759,13 +859,44 @@ class Parser {
     return this.failAt(token.span, `expected an expression, but found ${describeToken(token)}`);
   }
 
+  /** `super(args)` or the `super` of `super.method(args)`. */
+  private parseSuper(): Expression {
+    const keyword = this.advance();
+    if (this.atPunct("(")) {
+      this.advance();
+      const args: Expression[] = [];
+      if (!this.atPunct(")")) {
+        do {
+          args.push(this.parseExpression());
+        } while (this.matchPunct(","));
+      }
+      const close = this.expectPunct(")", "to close super(");
+      return { kind: "SuperCall", args, span: joinSpans(keyword.span, close.span) };
+    }
+    if (!this.atPunct(".")) this.failMissing("expected '(' or '.' after 'super': super(...) calls the parent's constructor, super.name(...) its method");
+    return { kind: "Super", span: keyword.span };
+  }
+
   private parseNew(): Expression {
     const keyword = this.advance();
     const type = this.peek();
     const isType = (type.type === "keyword" && PRIMITIVE_TYPES.has(type.text)) || type.type === "identifier";
     if (!isType) this.failAt(type.span, `expected a type after 'new', but found ${describeToken(type)}`);
     this.advance();
-    if (!this.atPunct("[")) this.failMissing(`expected '[' with the array size after 'new ${type.text}'`);
+    if (type.type === "identifier" && this.atPunct("(")) {
+      this.advance();
+      const args: Expression[] = [];
+      if (!this.atPunct(")")) {
+        do {
+          args.push(this.parseExpression());
+        } while (this.matchPunct(","));
+      }
+      const close = this.expectPunct(")", `to close the arguments of new ${type.text}`);
+      return { kind: "NewObject", className: type.text, classSpan: type.span, args, span: joinSpans(keyword.span, close.span) };
+    }
+    if (!this.atPunct("[")) {
+      this.failMissing(type.type === "identifier" ? `expected '(' with the arguments after 'new ${type.text}', or '[' with an array size` : `expected '[' with the array size after 'new ${type.text}'`);
+    }
     const sizes: Expression[] = [];
     let end = type.span;
     while (this.atPunct("[")) {

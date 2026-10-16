@@ -1,4 +1,4 @@
-import type { Expression, Initializer, Node, Program, Statement, TypeRef } from "./parser/ast";
+import type { ClassMember, Expression, Initializer, Node, Program, Statement, TypeRef } from "./parser/ast";
 import type { Span } from "./span";
 
 /** The syntax tree in a form the interface can draw and send between threads (AC-29). */
@@ -65,6 +65,27 @@ function expressionView(expression: Initializer): AstNode {
       );
     case "ArrayLiteral":
       return node("ArrayLiteral", `{ } ${expression.elements.length}`, span, expression.elements.map(expressionView));
+    case "This":
+      return leaf("This", "this", span);
+    case "Super":
+      return leaf("Super", "super", span);
+    case "SuperCall":
+      return node("SuperCall", "super( )", span, expression.args.map(expressionView));
+    case "NewObject":
+      return node("NewObject", `new ${expression.className}`, span, expression.args.map(expressionView));
+  }
+}
+
+function memberView(member: ClassMember): AstNode {
+  const params = (list: readonly { type: TypeRef; name: string }[]): string => list.map((p) => `${type(p.type)} ${p.name}`).join(", ");
+  const access = member.access === "private" ? "private " : "";
+  switch (member.kind) {
+    case "ClassField":
+      return node("ClassField", `${access}${type(member.type)} ${member.name}`, member.span, [member.init ? expressionView(member.init) : null]);
+    case "MethodDecl":
+      return node("MethodDecl", `${access}${type(member.returnType)} ${member.name}(${params(member.params)})`, member.span, [statementView(member.body)]);
+    case "CtorDecl":
+      return node("CtorDecl", `${access}${member.name}(${params(member.params)})`, member.span, [statementView(member.body)]);
   }
 }
 
@@ -129,6 +150,8 @@ function statementView(statement: Statement): AstNode {
         span,
         statement.fields.map((field) => leaf("Field", `${type(field.type)} ${field.name}`, field.nameSpan)),
       );
+    case "ClassDecl":
+      return node("ClassDecl", `class ${statement.name}${statement.superName ? ` extends ${statement.superName}` : ""}`, span, statement.members.map(memberView));
   }
 }
 

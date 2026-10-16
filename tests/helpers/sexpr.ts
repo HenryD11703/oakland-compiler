@@ -1,4 +1,4 @@
-import type { ArrayLiteral, Initializer, Program, Statement, TypeRef } from "../../src/core/parser/ast";
+import type { ArrayLiteral, ClassMember, Initializer, Program, Statement, TypeRef } from "../../src/core/parser/ast";
 import { parse } from "../../src/core/parser/parser";
 
 const typeText = (type: TypeRef): string => type.name + "[]".repeat(type.dims);
@@ -34,6 +34,27 @@ export function showExpression(node: Initializer): string {
       return `(struct ${[node.structName, ...node.fields.map((f) => `${f.name}:${showExpression(f.value)}`)].join(" ")})`;
     case "ArrayLiteral":
       return `{${(node as ArrayLiteral).elements.map(showExpression).join(" ")}}`;
+    case "This":
+      return "this";
+    case "Super":
+      return "super";
+    case "SuperCall":
+      return `(super ${node.args.map(showExpression).join(" ")})`.replace("(super )", "(super)");
+    case "NewObject":
+      return `(new ${[node.className, ...node.args.map(showExpression)].join(" ")})`;
+  }
+}
+
+export function showMember(node: ClassMember): string {
+  const params = (list: readonly { type: TypeRef; name: string }[]): string => list.map((p) => `${typeText(p.type)} ${p.name}`).join(" ");
+  const access = node.access === "private" ? "private " : "";
+  switch (node.kind) {
+    case "ClassField":
+      return `(${access}field ${typeText(node.type)} ${node.name}${node.init ? " " + showExpression(node.init) : ""})`;
+    case "MethodDecl":
+      return `(${access}method ${typeText(node.returnType)} ${node.name} (${params(node.params)}) ${showStatement(node.body)})`;
+    case "CtorDecl":
+      return `(${access}ctor ${node.name} (${params(node.params)}) ${showStatement(node.body)})`;
   }
 }
 
@@ -79,6 +100,8 @@ export function showStatement(node: Statement): string {
     }
     case "StructDecl":
       return `(${join("struct", node.name, ...node.fields.map((f) => `(${typeText(f.type)} ${f.name})`))})`;
+    case "ClassDecl":
+      return `(${join("class", node.name, node.superName ? `extends ${node.superName}` : "", ...node.members.map(showMember))})`;
   }
 }
 

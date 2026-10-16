@@ -1,7 +1,7 @@
 import type { Program, Statement, TypeRef } from "./parser/ast";
 import type { Span } from "./span";
 
-export type SymbolKind = "variable" | "array" | "function" | "struct";
+export type SymbolKind = "variable" | "array" | "function" | "struct" | "class" | "field" | "method";
 
 /** One name the program declared (AC-30). */
 export interface SymbolEntry {
@@ -69,6 +69,23 @@ export function collectSymbols(program: Program): SymbolEntry[] {
       case "StructDecl":
         add(statement.name, "struct", statement.name, labels, statement.nameSpan);
         return;
+      case "ClassDecl": {
+        add(statement.name, "class", statement.superName ? `${statement.name} extends ${statement.superName}` : statement.name, labels, statement.nameSpan);
+        const own = [...labels, `class ${statement.name}`];
+        for (const member of statement.members) {
+          if (member.kind === "ClassField") {
+            add(member.name, "field", typeText(member.type), own, member.nameSpan);
+            continue;
+          }
+          const isMethod = member.kind === "MethodDecl";
+          const signature = `${isMethod ? typeText(member.returnType) : statement.name}(${member.params.map((p) => typeText(p.type)).join(", ")})`;
+          add(member.name, "method", signature, own, member.nameSpan);
+          const inner = [...labels, `method ${statement.name}.${isMethod ? member.name : "new"}`];
+          for (const param of member.params) add(param.name, variableKind(typeText(param.type)), typeText(param.type), inner, param.nameSpan);
+          member.body.body.forEach((child) => visit(child, inner));
+        }
+        return;
+      }
       case "If":
         visit(statement.then, labels);
         if (statement.otherwise) visit(statement.otherwise, labels);

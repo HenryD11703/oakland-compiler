@@ -5,12 +5,19 @@
 program        = { declaration } ;
 
 (* ---------- declarations ---------- *)
-declaration    = struct-decl | function-decl | var-decl | statement ;
+declaration    = struct-decl | class-decl | function-decl | var-decl | statement ;
 
 struct-decl    = 'struct' NAME '{' { field } '}' [ ';' ] ;
 field          = type NAME ';' ;
 
 function-decl  = ( type | 'void' ) NAME '(' [ param { ',' param } ] ')' block ;
+
+(* A class is declared at the top level of the program, never inside a block or a function. *)
+class-decl     = 'class' NAME [ 'extends' NAME ] '{' { member } '}' ;
+member         = [ 'public' | 'private' ] ( class-field | constructor | method ) ;
+class-field    = type NAME [ '=' initializer ] ';' ;
+constructor    = NAME '(' [ param { ',' param } ] ')' block ;     (* NAME is the name of the class *)
+method         = ( type | 'void' ) NAME '(' [ param { ',' param } ] ')' block ;
 param          = type NAME ;
 
 var-decl       = 'var' NAME '=' expression ';'
@@ -58,6 +65,10 @@ arguments      = expression { ',' expression } ;
 
 primary        = INT | FLOAT | STRING | CHAR | 'true' | 'false' | 'null'
                | '(' expression ')'
+               | 'this'
+               | 'super' '(' [ arguments ] ')'                      (* only as the first statement of a constructor *)
+               | 'super' '.' NAME                                   (* only to call a method: super.speak() *)
+               | 'new' NAME '(' [ arguments ] ')'
                | 'new' ( 'int' | 'float' | 'string' | 'boolean' | 'char' | NAME ) '[' expression ']' { '[' expression ']' }
                | NAME '{' [ field-init { ',' field-init } ] '}'      (* only when NAME is a declared struct *)
                | NAME ;
@@ -72,4 +83,4 @@ CHAR           = "'" ( any-char-but-quote-backslash-newline | escape ) "'" ;
 escape         = '\' ( 'n' | 't' | 'r' | '0' | 'b' | 'f' | '"' | "'" | '\' ) ;
 
 (* Reserved words: int float string boolean char void var struct if else while for switch case default
-   break continue return new true false null typeof *)
+   break continue return new true false null typeof class extends this super private public *)

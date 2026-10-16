@@ -1,3 +1,4 @@
+import type { ClassEntry } from "./environment";
 import { elementTypeOf, isArrayType } from "./types";
 
 /** The result of evaluating an expression: a type and the raw JavaScript value (null means OakLand null). */
@@ -33,6 +34,32 @@ export class OakStruct {
     readonly fields: readonly StructField[],
     readonly values: Map<string, unknown>,
   ) {}
+}
+
+/** An instance of a class. It is a struct whose name is the class it was really created from (never a parent's). */
+export class OakObject extends OakStruct {
+  constructor(
+    readonly cls: ClassEntry,
+    fields: readonly StructField[],
+    values: Map<string, unknown>,
+  ) {
+    super(cls.name, fields, values);
+  }
+}
+
+/** What a field of a class holds before anything is stored in it: the Java defaults, so a string is null, not "". */
+export function fieldDefault(type: string): unknown {
+  switch (type) {
+    case "int":
+    case "float":
+      return 0;
+    case "boolean":
+      return false;
+    case "char":
+      return "\0";
+    default:
+      return null;
+  }
 }
 
 /** What a variable holds before anything is stored in it (`new int[3]` is `{0, 0, 0}`, `int x;` is null). */
