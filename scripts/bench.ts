@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 // esbuild's `keepNames` helper to every closure and make the interpreter two to three times slower than it is.
 const root = join(import.meta.dirname, "..");
 const outDir = join(root, "node_modules", ".cache", "oakland-bench");
-execFileSync("npx", ["vite", "build", "--ssr", "src/core/index.ts", "--outDir", outDir, "--emptyOutDir", "--logLevel", "error"], { cwd: root, stdio: "inherit" });
+execFileSync("npx", ["vite", "build", "--ssr", "src/core/index.ts", "--outDir", outDir, "--emptyOutDir", "--logLevel", "error"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
 const { run } = (await import(pathToFileURL(join(outDir, "index.js")).href)) as typeof import("../src/core/index");
 
 const runsArg = process.argv.indexOf("--runs");
