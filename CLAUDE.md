@@ -33,6 +33,7 @@ Update golden snapshots after an intended change: `npx vitest run -u`, then read
 
 ## Things that cost time before
 - **Do not run `python3`** (or `python -`) in the shell: on this Windows setup it waits for input and blocks 30 s. Use Node for scripts.
+- **Chromium on WSL without `sudo`:** Playwright's Chromium needs `libnspr4`, `libnss3` and `libasound2t64`. `apt-get download` them into a scratch folder, `dpkg -x` each `.deb` there, and run with `LD_LIBRARY_PATH=<folder>/usr/lib/x86_64-linux-gnu`. Then `npm run test:e2e` and `npm run screenshots` work locally.
 - Long heredocs with quotes inside `Bash` sometimes fail to parse; write scripts with the file-writing tool and run them.
 - Kill whatever listens on port 3100 before `npm run test:e2e`; `reuseExistingServer` is off, and a stale `vite preview` serves an old build.
 - `vite preview` needs the production `base`; `vite.config.ts` handles it (`isPreview`).

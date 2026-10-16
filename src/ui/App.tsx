@@ -450,7 +450,7 @@ export function App() {
       <footer className="tape" aria-label="Step through the run">
         <div className="deck">
           <button type="button" aria-label="Back to the start" onClick={() => seek(-1)} disabled={!trace}>
-            ⏮
+            |◂
           </button>
           <button type="button" aria-label="Back one step" onClick={() => seek(Math.max(-1, step - 1))} disabled={!trace}>
             ◂

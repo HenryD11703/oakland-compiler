@@ -292,11 +292,11 @@ test.describe("layout (AC-33)", () => {
 
     const varsDivider = page.getByRole("separator", { name: /variables and the views/ });
     await varsDivider.focus();
+    await page.keyboard.press("Home");
+    await expect.poll(height).toBeLessThanOrEqual(80);
+    const smallest = await height();
     await page.keyboard.press("Shift+ArrowDown");
-    await expect.poll(height).toBeGreaterThan(0);
-    const taller = await height();
-    await page.keyboard.press("Shift+ArrowDown");
-    await expect.poll(height).toBeGreaterThan(taller + 30);
+    await expect.poll(height).toBeGreaterThan(smallest + 50);
 
     const kept = await width();
     await page.reload();

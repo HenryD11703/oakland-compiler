@@ -59,7 +59,7 @@ button:disabled { cursor: default; opacity: 0.45; }
 
 /* ---------- sheet ---------- */
 /* The right-hand column is 5/12 until the person drags the divider; then --side-w holds its width in pixels. */
-.sheet { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 9px var(--side-w, minmax(340px, 5fr)); }
+.sheet { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 7fr) 9px var(--side-w, minmax(340px, 5fr)); }
 .code { min-height: 0; min-width: 0; overflow: hidden; display: flex; }
 .side { min-height: 0; min-width: 0; overflow: auto; display: flex; flex-direction: column; }
 .block { padding: 12px 24px; border-bottom: 1px solid var(--rule); }
@@ -178,7 +178,7 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
 /* The drawing takes its colours from the tokens above. */
 .tl-rule { stroke: var(--rule); }
 .tl-ink-line { stroke: var(--ink); fill: none; }
-.tl-held { fill: var(--ink); }
+.tl-held { fill: var(--dim); }
 .tl-not-held { fill: var(--edge); }
 .tl-area { fill: var(--mark-wash); }
 .tl-mark-line { stroke: var(--mark); fill: none; }
