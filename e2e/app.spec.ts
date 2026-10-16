@@ -309,6 +309,24 @@ test.describe("layout (AC-33)", () => {
     await expect.poll(async () => Math.abs((await width()) - kept)).toBeGreaterThan(20);
   });
 
+  test("an element that is not ours inside the grid does not push the panels out of place", async ({ page }, info) => {
+    test.skip(info.project.name === "mobile", "on a phone the panels are tabs and there is no grid");
+    // A browser extension or a translation layer can add a node to the page: the panels must keep their cells.
+    await page.evaluate(() => {
+      const sheet = document.querySelector(".sheet");
+      sheet?.prepend(document.createElement("div"));
+      sheet?.append(document.createElement("div"));
+    });
+    const code = await page.locator(".sheet > .code").boundingBox();
+    const side = await page.locator(".side").boundingBox();
+    const divider = await page.getByRole("separator", { name: /code and the side panels/ }).boundingBox();
+    if (!code || !side || !divider) throw new Error("a panel is missing");
+    expect(side.x).toBeGreaterThan(code.x + code.width);
+    expect(Math.abs(divider.x - (code.x + code.width))).toBeLessThan(2);
+    expect(side.y).toBeLessThan(code.y + 5);
+    await expect(page.getByTestId("readout")).toBeVisible();
+  });
+
   test("a divider can be dragged with the mouse", async ({ page }, info) => {
     test.skip(info.project.name === "mobile", "on a phone the panels are tabs and there are no dividers");
     const side = page.locator(".side");
