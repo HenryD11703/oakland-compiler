@@ -5,7 +5,28 @@ import { ir, type Expr, type Func, type Local } from "./ir";
  * The part of the runtime that deals with memory and strings (plan D16), written in the IR so that it shows up in the
  * WAT view like any other function. A string is `[length: i32][UTF-16 code units]`; `0` is `null`.
  */
-export type MemoryRuntimeName = "alloc" | "int_to_str" | "char_to_str" | "float_to_str" | "str_concat" | "str_eq" | "str_cmp";
+export const MEMORY_RUNTIME_NAMES = [
+  "alloc",
+  "int_to_str",
+  "char_to_str",
+  "float_to_str",
+  "str_concat",
+  "str_eq",
+  "str_cmp",
+  "new_array",
+  "check_size",
+  "non_null",
+  "elem_addr",
+  "array_length",
+  "index_of_i32",
+  "index_of_f64",
+  "index_of_str",
+  "join_strings",
+] as const;
+export type MemoryRuntimeName = (typeof MEMORY_RUNTIME_NAMES)[number];
+
+/** An array is `[length: i32][4 bytes of padding][elements]`, so that an 8-byte float element is always aligned. */
+export const ARRAY_HEADER = 8;
 
 /** What a runtime function asks of the lowerer that holds it. */
 export interface RuntimeNeeds {
@@ -40,6 +61,10 @@ const length = (s: string): Expr => ir.load("i32.load", get(s));
 export function memoryRuntime(name: MemoryRuntimeName, needs: RuntimeNeeds): Func {
   const full = `rt:${name}`;
   const fail = (): Expr[] => [ir.call(needs.host("fail"), get("site"), i32(0), i32(0)), ir.unreachable()];
+  /** Fails at the place `site` names, filling `{0}` and `{1}` of its message with two numbers. */
+  const failWith = (site: Expr, a: Expr, b: Expr): Expr[] => [ir.call(needs.host("fail"), site, a, b), ir.unreachable()];
+  /** The address of element `index` of the array named `arrayName`, for 4-byte elements when `shift` is 2 and 8-byte when it is 3. */
+  const slot = (arrayName: string, index: Expr, shift: Expr): Expr => op("i32.add", get(arrayName), op("i32.shl", index, shift));
   const alloc = (): string => needs.call("alloc");
 
   switch (name) {
@@ -206,5 +231,144 @@ export function memoryRuntime(name: MemoryRuntimeName, needs: RuntimeNeeds): Fun
           ir.select(i32(-1), ir.select(i32(1), i32(0), op("i32.gt_u", get("na"), get("nb"))), op("i32.lt_u", get("na"), get("nb"))),
         ],
       };
+
+    // An array of `len` elements, all zero (which is 0, 0.0, false, the character 0 and null) unless `fill` says otherwise.
+    case "new_array":
+      return {
+        name: full,
+        params: [local("len"), local("shift"), local("fill"), local("site")],
+        results: ["i32"],
+        locals: [local("p"), local("i")],
+        body: [
+          ir.if(op("i32.gt_u", get("len"), op("i32.shr_u", i32(MAX_ALLOCATION), get("shift"))), fail()),
+          ir.set("p", ir.call(alloc(), op("i32.add", i32(ARRAY_HEADER), op("i32.shl", get("len"), get("shift"))), get("site"))),
+          ir.store("i32.store", get("p"), get("len")),
+          // The memory is fresh and never reused, so it is already zero; only a non-zero default needs writing (an empty string).
+          ir.if(get("fill"), [
+            ir.set("i", i32(0)),
+            ir.block("filled", [
+              ir.loop("next", [
+                ir.brIf("filled", op("i32.ge_u", get("i"), get("len"))),
+                ir.store("i32.store", op("i32.add", get("p"), op("i32.shl", get("i"), i32(2))), get("fill"), ARRAY_HEADER),
+                ir.set("i", op("i32.add", get("i"), i32(1))),
+                ir.br("next"),
+              ]),
+            ]),
+          ]),
+          get("p"),
+        ],
+      };
+
+    // The size of an array, checked before anything is made: it may not be negative.
+    case "check_size":
+      return {
+        name: full,
+        params: [local("n"), local("site")],
+        results: ["i32"],
+        locals: [],
+        body: [ir.if(op("i32.lt_s", get("n"), i32(0)), failWith(get("site"), get("n"), i32(0))), get("n")],
+      };
+
+    case "non_null":
+      return { name: full, params: [local("p"), local("site")], results: ["i32"], locals: [], body: [ir.if(op("i32.eqz", get("p")), fail()), get("p")] };
+
+    // Where element `index` of `arr` is, checked: `site` says "cannot index null" and `site + 1` says the index is out of range.
+    case "elem_addr":
+      return {
+        name: full,
+        params: [local("arr"), local("index"), local("shift"), local("site")],
+        results: ["i32"],
+        locals: [local("len")],
+        body: [
+          ir.if(op("i32.eqz", get("arr")), fail()),
+          ir.set("len", length("arr")),
+          ir.if(op("i32.ge_u", get("index"), get("len")), failWith(op("i32.add", get("site"), i32(1)), get("index"), get("len"))),
+          slot("arr", get("index"), get("shift")),
+        ],
+      };
+
+    case "array_length":
+      return { name: full, params: [local("arr"), local("site")], results: ["i32"], locals: [], body: [ir.if(op("i32.eqz", get("arr")), fail()), length("arr")] };
+
+    // `indexOf`: the first position that holds the value, or -1. The three versions differ only in how two elements are compared.
+    case "index_of_i32":
+    case "index_of_f64":
+    case "index_of_str": {
+      const kind = name === "index_of_f64" ? "f64" : "i32";
+      const element = ir.load(kind === "f64" ? "f64.load" : "i32.load", slot("arr", get("i"), i32(kind === "f64" ? 3 : 2)), ARRAY_HEADER);
+      const same = name === "index_of_str" ? ir.call(needs.call("str_eq"), element, get("x")) : kind === "f64" ? op("f64.eq", element, get("x")) : op("i32.eq", element, get("x"));
+      return {
+        name: full,
+        params: [local("arr"), { name: "x", type: kind }, local("site")],
+        results: ["i32"],
+        locals: [local("len"), local("i")],
+        body: [
+          ir.if(op("i32.eqz", get("arr")), fail()),
+          ir.set("len", length("arr")),
+          ir.set("i", i32(0)),
+          ir.block("missing", [
+            ir.loop("next", [
+              ir.brIf("missing", op("i32.ge_u", get("i"), get("len"))),
+              ir.if(same, [ir.return(get("i"))]),
+              ir.set("i", op("i32.add", get("i"), i32(1))),
+              ir.br("next"),
+            ]),
+          ]),
+          i32(-1),
+        ],
+      };
+    }
+
+    // The elements, already turned into strings (an array of strings), joined with ", " and optionally wrapped in [ ].
+    case "join_strings": {
+      const nothing = i32(needs.literal("null"));
+      const piece = (): Expr => ir.load("i32.load", slot("strs", get("i"), i32(2)), ARRAY_HEADER);
+      return {
+        name: full,
+        params: [local("strs"), local("bracketed"), local("site")],
+        results: ["i32"],
+        locals: [local("n"), local("i"), local("s"), local("total"), local("p"), local("q"), local("len")],
+        body: [
+          ir.set("n", length("strs")),
+          ir.set("total", op("i32.shl", get("bracketed"), i32(1))),
+          ir.if(op("i32.gt_s", get("n"), i32(0)), [ir.set("total", op("i32.add", get("total"), op("i32.shl", op("i32.sub", get("n"), i32(1)), i32(1))))]),
+          ir.set("i", i32(0)),
+          ir.block("measured", [
+            ir.loop("measure", [
+              ir.brIf("measured", op("i32.ge_u", get("i"), get("n"))),
+              ir.set("s", piece()),
+              ir.if(op("i32.eqz", get("s")), [ir.set("s", nothing)]),
+              ir.set("total", op("i32.add", get("total"), length("s"))),
+              ir.set("i", op("i32.add", get("i"), i32(1))),
+              ir.br("measure"),
+            ]),
+          ]),
+          ir.set("p", ir.call(alloc(), stringBytes(get("total")), get("site"))),
+          ir.store("i32.store", get("p"), get("total")),
+          ir.set("q", op("i32.add", get("p"), i32(4))),
+          ir.if(get("bracketed"), [ir.store("i32.store16", get("q"), i32(91)), ir.set("q", op("i32.add", get("q"), i32(2)))]),
+          ir.set("i", i32(0)),
+          ir.block("written", [
+            ir.loop("write", [
+              ir.brIf("written", op("i32.ge_u", get("i"), get("n"))),
+              ir.if(get("i"), [
+                ir.store("i32.store16", get("q"), i32(44)),
+                ir.store("i32.store16", get("q"), i32(32), 2),
+                ir.set("q", op("i32.add", get("q"), i32(4))),
+              ]),
+              ir.set("s", piece()),
+              ir.if(op("i32.eqz", get("s")), [ir.set("s", nothing)]),
+              ir.set("len", length("s")),
+              op("memory.copy", get("q"), op("i32.add", get("s"), i32(4)), op("i32.shl", get("len"), i32(1))),
+              ir.set("q", op("i32.add", get("q"), op("i32.shl", get("len"), i32(1)))),
+              ir.set("i", op("i32.add", get("i"), i32(1))),
+              ir.br("write"),
+            ]),
+          ]),
+          ir.if(get("bracketed"), [ir.store("i32.store16", get("q"), i32(93))]),
+          get("p"),
+        ],
+      };
+    }
   }
 }

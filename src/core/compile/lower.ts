@@ -1,13 +1,19 @@
 import type { CheckResult } from "../check/check";
 import { diagnostic, type Diagnostic } from "../diagnostics";
 import type {
+  ArrayLiteral,
   Assign,
   Binary,
   Call,
   Expression,
   For,
+  Foreach,
   FuncDecl,
+  Index,
   Initializer,
+  LValue,
+  Member,
+  NewArray,
   Program,
   Statement,
   Switch,
@@ -19,7 +25,7 @@ import type {
 import type { Span } from "../span";
 import { INT_MAX, INT_MIN } from "../types";
 import { HOST_IMPORTS, type FailSite, type HostName } from "./host";
-import { HEAP, MAX_PAGES, memoryRuntime, type MemoryRuntimeName } from "./runtime";
+import { ARRAY_HEADER, HEAP, MAX_PAGES, MEMORY_RUNTIME_NAMES, memoryRuntime, type MemoryRuntimeName } from "./runtime";
 import { emptyModule, ir, type DataSegment, type Expr, type Func, type Global, type Import, type Local, type Module, type ValType } from "./ir";
 
 /** What `lower` produces: the module, the table of places that can fail, and what it could not translate. */
@@ -56,6 +62,23 @@ const FIRST_ADDRESS = 8;
 const PAGE = 65536;
 
 const valType = (type: string): ValType => (type === "float" ? "f64" : "i32");
+
+const isArray = (type: string): boolean => type.endsWith("[]");
+const elementOf = (type: string): string => type.slice(0, -2);
+/** The size of an element as a power of two: a float takes 8 bytes, everything else (ints, chars, booleans, addresses) 4. */
+const shiftOf = (elementType: string): number => (elementType === "float" ? 3 : 2);
+const loadOf = (elementType: string): "f64.load" | "i32.load" => (elementType === "float" ? "f64.load" : "i32.load");
+const storeOf = (elementType: string): "f64.store" | "i32.store" => (elementType === "float" ? "f64.store" : "i32.store");
+/** A type name made safe to use inside the name of a function. */
+const mangle = (type: string): string => type.replace(/\[\]/g, "_arr");
+
+/** A place an assignment or an update can write: a variable or an element. `setup` runs first (it works out an element's address once). */
+interface Place {
+  readonly type: string;
+  readonly setup: Expr[];
+  read(): Expr;
+  write(value: Expr): Expr;
+}
 
 /** An `int`, `char` or `boolean`: all are an i32, and `char` and `int` mix in arithmetic. */
 const isWhole = (type: string): boolean => type === "int" || type === "char" || type === "boolean";
@@ -271,8 +294,7 @@ class Lowerer {
       case "For":
         return this.forLoop(s);
       case "Foreach":
-        this.unsupported(s.span, "a for-each loop");
-        return [];
+        return this.foreach(s);
       case "Switch":
         return this.switchStatement(s);
       case "Break": {
@@ -305,17 +327,18 @@ class Lowerer {
   private varDecl(s: VarDecl, topLevel: boolean): Expr[] {
     const type = s.declaredType === null ? this.typeOf(s.init as Expression) : s.declaredType.name + "[]".repeat(s.declaredType.dims);
     // The initial value is lowered before the name exists, so that `int x = x;` does not see itself.
-    const init = s.init === null ? null : this.initializer(s.init, type);
+    let init = s.init === null ? null : this.initializer(s.init, type);
+    // `int[] b = a;` copies the array (the course's "by copy"); every other way of getting an array shares it.
+    if (init !== null && s.init !== null && s.init.kind === "Identifier" && isArray(type)) {
+      init = ir.call(this.copyFunction(this.typeOf(s.init)), init, ir.i32(this.site(s.span, "out of memory")));
+    }
     const binding = this.declare(s.name, type, topLevel);
     // A declaration with no value starts at zero every time it runs, as the interpreter's `null` does for a reference.
     return [this.write(binding, init ?? (valType(type) === "f64" ? ir.f64(0) : ir.i32(0)))];
   }
 
   private initializer(init: Initializer, type: string): Expr {
-    if (init.kind === "ArrayLiteral") {
-      this.unsupported(init.span, "a list of values");
-      return ir.i32(0);
-    }
+    if (init.kind === "ArrayLiteral") return this.arrayLiteral(init, type);
     return this.convert(this.expression(init), this.typeOf(init), type);
   }
 
@@ -387,24 +410,23 @@ class Lowerer {
   }
 
   private update(s: Update): Expr {
-    const type = this.typeOf(s.target);
+    const place = this.placeOf(s.target, s.span);
+    if (place === null) return ir.nop();
     const delta = s.op === "++" ? 1 : -1;
     const step = (current: Expr): Expr =>
-      type === "float" ? ir.op("f64.add", current, ir.f64(delta)) : ir.op("i32.add", current, ir.i32(delta));
-    if (s.target.kind === "Identifier") {
-      const binding = this.lookup(s.target.name);
-      return this.write(binding, step(this.read(binding)));
-    }
-    this.unsupported(s.span, "this update");
-    return ir.nop();
+      place.type === "float" ? ir.op("f64.add", current, ir.f64(delta)) : ir.op("i32.add", current, ir.i32(delta));
+    return this.sequence(place.setup, place.write(step(place.read())), null);
   }
 
   private print(args: readonly Expression[]): Expr[] {
+    // The interpreter works out every argument before it writes anything, so a call that prints, or a mistake, in a
+    // later argument comes before the first one's text. The values wait in locals until the line is written.
     const out: Expr[] = [];
+    const values = args.map((arg) => this.spill(this.expression(arg), this.typeOf(arg), out, true));
     args.forEach((arg, i) => {
       if (i > 0) out.push(ir.call(this.host("write_char"), ir.i32(32)));
       const type = this.typeOf(arg);
-      const value = this.expression(arg);
+      const value = values[i] as Expr;
       switch (type) {
         case "int":
           out.push(ir.call(this.host("write_i32"), value));
@@ -423,7 +445,8 @@ class Lowerer {
           out.push(ir.call(this.host("write_string"), value));
           break;
         default:
-          this.unsupported(arg.span, `printing a ${type}`);
+          if (isArray(type)) out.push(ir.call(this.host("write_string"), this.toText(value, type, ir.i32(this.site(arg.span, "out of memory")), arg.span)));
+          else this.unsupported(arg.span, `printing a ${type}`);
       }
     });
     out.push(ir.call(this.host("write_char"), ir.i32(10)));
@@ -459,15 +482,24 @@ class Lowerer {
         return this.assign(e, true);
       case "Call":
         return this.call(e);
-      case "Index":
+      case "Index": {
+        const elementType = elementOf(this.typeOf(e.target));
+        return ir.load(loadOf(elementType), this.elementAddress(e), ARRAY_HEADER);
+      }
       case "Member":
+        if (e.name === "length" && isArray(this.typeOf(e.object))) {
+          return ir.call(this.runtimeFunction("array_length"), this.expression(e.object), ir.i32(this.site(e.span, "cannot read length of null")));
+        }
+        this.unsupported(e.span, "a struct or an object");
+        return this.placeholder(e);
       case "NewArray":
+        return this.newArray(e);
       case "StructLiteral":
       case "NewObject":
       case "This":
       case "Super":
       case "SuperCall":
-        this.unsupported(e.span, e.kind === "Index" || e.kind === "NewArray" ? "an array" : e.kind === "Member" || e.kind === "StructLiteral" ? "a struct or an object" : "an object");
+        this.unsupported(e.span, e.kind === "StructLiteral" ? "a struct or an object" : "an object");
         return this.placeholder(e);
     }
   }
@@ -519,7 +551,7 @@ class Lowerer {
 
     if (e.op === "+" && (left === "string" || right === "string")) {
       const site = this.site(e.span, "out of memory");
-      return this.concat(this.toText(this.expression(e.left), left, site, e.left.span), this.toText(this.expression(e.right), right, site, e.right.span), site);
+      return this.concat(this.toText(this.expression(e.left), left, ir.i32(site), e.left.span), this.toText(this.expression(e.right), right, ir.i32(site), e.right.span), site);
     }
     if (left === "string" && right === "string") {
       const order = this.runtimeFunction("str_cmp");
@@ -606,36 +638,197 @@ class Lowerer {
     return ir.if(this.expression(e.condition), [whenTrue], [whenFalse], valType(type));
   }
 
+  /** The place an assignment or an update writes, or null (after saying so) when it is not one the compiler handles yet. */
+  private placeOf(target: LValue, span: Span): Place | null {
+    if (target.kind === "Identifier") {
+      const binding = this.lookup(target.name);
+      return { type: binding.type, setup: [], read: () => this.read(binding), write: (value) => this.write(binding, value) };
+    }
+    if (target.kind === "Index") {
+      const elementType = elementOf(this.typeOf(target.target));
+      // The address is worked out once, before the value: the interpreter checks the index first, then evaluates the value.
+      const slot = this.fresh("slot");
+      this.locals.push({ name: slot, type: "i32" });
+      return {
+        type: elementType,
+        setup: [ir.set(slot, this.elementAddress(target))],
+        read: () => ir.load(loadOf(elementType), ir.get(slot), ARRAY_HEADER),
+        write: (value) => ir.store(storeOf(elementType), ir.get(slot), value, ARRAY_HEADER),
+      };
+    }
+    this.unsupported(span, "assigning to a field");
+    return null;
+  }
+
+  /** Statements that run in order, then a last one; a single block when there is something before it. */
+  private sequence(before: readonly Expr[], last: Expr, result: ValType | null): Expr {
+    return before.length === 0 ? last : ir.block(this.fresh("do"), [...before, last], result);
+  }
+
+  /**
+   * A value that is safe to use after other code has run: a constant stays as it is, anything else waits in a new local.
+   * A plain read of a local also stays unless `everything` says that code which could change it will run first.
+   */
+  private spill(value: Expr, type: string, before: Expr[], everything = false): Expr {
+    if (value.kind === "const" || (!everything && value.kind === "local.get")) return value;
+    const name = this.fresh("tmp");
+    this.locals.push({ name, type: valType(type) });
+    before.push(ir.set(name, value));
+    return ir.get(name);
+  }
+
   /** An assignment. As a value it leaves the assigned value on the stack; as a statement it leaves nothing. */
   private assign(e: Assign, asValue: boolean): Expr {
-    if (e.target.kind !== "Identifier") {
-      this.unsupported(e.span, "assigning to an element or a field");
-      return asValue ? this.placeholder(e) : ir.nop();
-    }
-    const binding = this.lookup(e.target.name);
-    const targetType = binding.type;
+    const place = this.placeOf(e.target, e.span);
+    if (place === null) return asValue ? this.placeholder(e) : ir.nop();
+    const targetType = place.type;
+    const before: Expr[] = [...place.setup];
     let value = this.expression(e.value);
     const valueType = this.typeOf(e.value);
     if (e.op === "=") {
       value = this.convert(value, valueType, targetType);
     } else {
+      // The interpreter works out the value before it reads the place, so a call in the value may change the place first.
+      value = this.spill(value, valueType, before);
       if (targetType === "string") {
         const site = this.site(e.span, "out of memory");
-        value = this.concat(this.read(binding), this.toText(value, valueType, site, e.value.span), site);
-        return this.finishAssign(binding, value, targetType, asValue);
+        value = this.concat(place.read(), this.toText(value, valueType, ir.i32(site), e.value.span), site);
+      } else {
+        const wide = targetType === "float" || valueType === "float";
+        const current = this.convert(place.read(), targetType, wide ? "float" : "int");
+        const operand = this.convert(value, valueType, wide ? "float" : "int");
+        const synthetic: Binary = { kind: "Binary", op: e.op === "+=" ? "+" : "-", left: e.target, right: e.value, span: e.span };
+        value = this.convert(wide ? this.floatOp(synthetic, current, operand) : this.intOp(synthetic, current, operand), wide ? "float" : "int", targetType);
       }
-      const wide = targetType === "float" || valueType === "float";
-      const current = this.convert(this.read(binding), targetType, wide ? "float" : "int");
-      const operand = this.convert(value, valueType, wide ? "float" : "int");
-      const synthetic: Binary = { kind: "Binary", op: e.op === "+=" ? "+" : "-", left: e.target, right: e.value, span: e.span };
-      value = this.convert(wide ? this.floatOp(synthetic, current, operand) : this.intOp(synthetic, current, operand), wide ? "float" : "int", targetType);
     }
-    return this.finishAssign(binding, value, targetType, asValue);
+    if (!asValue) return this.sequence(before, place.write(value), null);
+    if (e.target.kind === "Identifier" && before.length === 0) {
+      const binding = this.lookup(e.target.name);
+      if (binding.kind === "local") return ir.tee(binding.wasm, value);
+    }
+    // The value is kept in a local so that it can be stored and then left as the result.
+    const kept = this.fresh("kept");
+    this.locals.push({ name: kept, type: valType(targetType) });
+    return ir.block(this.fresh("assign"), [...before, ir.set(kept, value), place.write(ir.get(kept)), ir.get(kept)], valType(targetType));
   }
 
-  private finishAssign(binding: Binding, value: Expr, targetType: string, asValue: boolean): Expr {
-    if (!asValue) return this.write(binding, value);
-    return binding.kind === "local" ? ir.tee(binding.wasm, value) : ir.block(this.fresh("assign"), [this.write(binding, value), this.read(binding)], valType(targetType));
+  // ---------- arrays ----------
+
+  /** Where `a[i]` is, checked: the array may not be null and the index must be inside it. Two places can fail, hence two sites. */
+  private elementAddress(e: Index): Expr {
+    const elementType = elementOf(this.typeOf(e.target));
+    const site = this.site(e.span, "cannot index null");
+    this.site(e.index.span, "index {0} is out of range for an array of length {1}");
+    return ir.call(this.runtimeFunction("elem_addr"), this.expression(e.target), this.expression(e.index), ir.i32(shiftOf(elementType)), ir.i32(site));
+  }
+
+  /** `new int[3]`, `new int[2][3]`: every size is worked out and checked first, in order, then the arrays are made, level by level. */
+  private newArray(e: NewArray): Expr {
+    const sizes = e.sizes.map(() => {
+      const name = this.fresh("size");
+      this.locals.push({ name, type: "i32" });
+      return name;
+    });
+    const before = e.sizes.map((size, k) =>
+      ir.set(sizes[k] as string, ir.call(this.runtimeFunction("check_size"), this.expression(size), ir.i32(this.site(size.span, "an array size cannot be negative ({0})")))),
+    );
+    const site = this.site(e.span, "out of memory");
+    return ir.block(this.fresh("new"), [...before, this.arrayLevel(e, 0, sizes, site)], "i32");
+  }
+
+  private arrayLevel(e: NewArray, level: number, sizes: readonly string[], site: number): Expr {
+    const last = level === sizes.length - 1;
+    const elementType = e.elementType + "[]".repeat(sizes.length - 1 - level);
+    // Strings in a new array start as the empty string, not null (like the interpreter); everything else starts as zero.
+    const fill = elementType === "string" ? this.stringLiteral("") : 0;
+    const make = ir.call(this.runtimeFunction("new_array"), ir.get(sizes[level] as string), ir.i32(shiftOf(elementType)), ir.i32(fill), ir.i32(site));
+    if (last) return make;
+    const array = this.fresh("array");
+    const i = this.fresh("i");
+    this.locals.push({ name: array, type: "i32" }, { name: i, type: "i32" });
+    const done = this.fresh("made");
+    const next = this.fresh("next");
+    return ir.block(this.fresh("rows"), [
+      ir.set(array, make),
+      ir.set(i, ir.i32(0)),
+      ir.block(done, [
+        ir.loop(next, [
+          ir.brIf(done, ir.op("i32.ge_u", ir.get(i), ir.get(sizes[level] as string))),
+          ir.store("i32.store", ir.op("i32.add", ir.get(array), ir.op("i32.shl", ir.get(i), ir.i32(2))), this.arrayLevel(e, level + 1, sizes, site), ARRAY_HEADER),
+          ir.set(i, ir.op("i32.add", ir.get(i), ir.i32(1))),
+          ir.br(next),
+        ]),
+      ]),
+      ir.get(array),
+    ], "i32");
+  }
+
+  /** `{1, 2, 3}` and `{{1, 2}, {3}}`: an array of exactly that many elements, each stored where it belongs. */
+  private arrayLiteral(literal: ArrayLiteral, type: string): Expr {
+    const elementType = elementOf(type);
+    const array = this.fresh("list");
+    this.locals.push({ name: array, type: "i32" });
+    const site = this.site(literal.span, "out of memory");
+    const size = 1 << shiftOf(elementType);
+    const body: Expr[] = [ir.set(array, ir.call(this.runtimeFunction("new_array"), ir.i32(literal.elements.length), ir.i32(shiftOf(elementType)), ir.i32(0), ir.i32(site)))];
+    literal.elements.forEach((element, k) => {
+      body.push(ir.store(storeOf(elementType), ir.get(array), this.initializer(element, elementType), ARRAY_HEADER + k * size));
+    });
+    body.push(ir.get(array));
+    return ir.block(this.fresh("literal"), body, "i32");
+  }
+
+  private foreach(s: Foreach): Expr[] {
+    const arrayType = this.typeOf(s.iterable);
+    const elementType = elementOf(arrayType);
+    const declared = s.varType === null ? elementType : s.varType.name + "[]".repeat(s.varType.dims);
+    const array = this.fresh("array");
+    const count = this.fresh("count");
+    const i = this.fresh("i");
+    this.locals.push({ name: array, type: "i32" }, { name: count, type: "i32" }, { name: i, type: "i32" });
+    const start = [
+      ir.set(array, ir.call(this.runtimeFunction("non_null"), this.expression(s.iterable), ir.i32(this.site(s.iterable.span, "cannot loop over null")))),
+      ir.set(count, ir.load("i32.load", ir.get(array))),
+      ir.set(i, ir.i32(0)),
+    ];
+    return this.inScope(() => {
+      const binding = this.declare(s.name, declared, false);
+      const element = ir.load(loadOf(elementType), ir.op("i32.add", ir.get(array), ir.op("i32.shl", ir.get(i), ir.i32(shiftOf(elementType)))), ARRAY_HEADER);
+      const brk = this.fresh("break");
+      const top = this.fresh("loop");
+      const next = this.fresh("continue");
+      this.loops.push({ brk, cont: next });
+      const body = this.inScope(() => this.statement(s.body, false));
+      this.loops.pop();
+      return [
+        ...start,
+        ir.block(brk, [
+          ir.loop(top, [
+            ir.brIf(brk, ir.op("i32.ge_u", ir.get(i), ir.get(count))),
+            this.write(binding, this.convert(element, elementType, declared)),
+            ir.block(next, body),
+            ir.set(i, ir.op("i32.add", ir.get(i), ir.i32(1))),
+            ir.br(top),
+          ]),
+        ]),
+      ];
+    });
+  }
+
+  /** The functions of `.join()` and `.indexOf(x)`; the other methods of arrays do not exist. */
+  private arrayMethod(e: Call, callee: Member): Expr {
+    const arrayType = this.typeOf(callee.object);
+    const elementType = elementOf(arrayType);
+    const array = this.expression(callee.object);
+    if (callee.name === "join") {
+      const text = this.joinFunction(arrayType, e.span);
+      const checked = ir.call(this.runtimeFunction("non_null"), array, ir.i32(this.site(e.span, "cannot call join on null")));
+      return ir.call(text, checked, ir.i32(this.site(e.span, "out of memory")));
+    }
+    const wanted = e.args[0] as Expression;
+    const site = ir.i32(this.site(e.span, "cannot call indexOf on null"));
+    if (elementType === "float") return ir.call(this.runtimeFunction("index_of_f64"), array, this.convert(this.expression(wanted), this.typeOf(wanted), "float"), site);
+    return ir.call(this.runtimeFunction(elementType === "string" ? "index_of_str" : "index_of_i32"), array, this.expression(wanted), site);
   }
 
   // ---------- strings ----------
@@ -645,26 +838,108 @@ class Lowerer {
   }
 
   /** A value as the text that joining it to a string shows (like `display` in the interpreter), as a string object. */
-  private toText(value: Expr, type: string, site: number, span: Span): Expr {
+  private toText(value: Expr, type: string, site: Expr, span: Span): Expr {
     switch (type) {
       case "string":
       case "null":
         return value;
       case "int":
-        return ir.call(this.runtimeFunction("int_to_str"), value, ir.i32(site));
+        return ir.call(this.runtimeFunction("int_to_str"), value, site);
       case "char":
-        return ir.call(this.runtimeFunction("char_to_str"), value, ir.i32(site));
+        return ir.call(this.runtimeFunction("char_to_str"), value, site);
       case "float":
-        return ir.call(this.runtimeFunction("float_to_str"), value, ir.i32(site));
+        return ir.call(this.runtimeFunction("float_to_str"), value, site);
       case "boolean":
         return ir.if(value, [ir.i32(this.stringLiteral("true"))], [ir.i32(this.stringLiteral("false"))], "i32");
       default:
+        if (isArray(type)) return ir.call(this.showFunction(type, true, span), value, site);
         this.unsupported(span, `joining a ${type} to a string`);
         return ir.i32(0);
     }
   }
 
+  /** `rt:show:T`: an array as text, like `[1, 2, 3]` (or `null`). It makes a string for each element, then joins them. */
+  private showFunction(type: string, bracketed: boolean, span: Span): string {
+    const name = `rt:${bracketed ? "show" : "join"}:${mangle(type)}`;
+    if (this.runtime.has(name)) return name;
+    const elementType = elementOf(type);
+    const get = ir.get;
+    const element = ir.load(loadOf(elementType), ir.op("i32.add", get("a"), ir.op("i32.shl", get("i"), ir.i32(shiftOf(elementType)))), ARRAY_HEADER);
+    const text = this.toText(element, elementType, get("site"), span);
+    const make = ir.call(this.runtimeFunction("new_array"), get("n"), ir.i32(2), ir.i32(0), get("site"));
+    this.runtime.set(name, {
+      name,
+      params: [{ name: "a", type: "i32" }, { name: "site", type: "i32" }],
+      results: ["i32"],
+      locals: [{ name: "n", type: "i32" }, { name: "i", type: "i32" }, { name: "strs", type: "i32" }],
+      body: [
+        // Showing null is the text "null"; joining it was checked (and failed) before this was called.
+        ir.if(ir.op("i32.eqz", get("a")), [ir.return(ir.i32(this.stringLiteral("null")))]),
+        ir.set("n", ir.load("i32.load", get("a"))),
+        ir.set("strs", make),
+        ir.set("i", ir.i32(0)),
+        ir.block("done", [
+          ir.loop("next", [
+            ir.brIf("done", ir.op("i32.ge_u", get("i"), get("n"))),
+            ir.store("i32.store", ir.op("i32.add", get("strs"), ir.op("i32.shl", get("i"), ir.i32(2))), text, ARRAY_HEADER),
+            ir.set("i", ir.op("i32.add", get("i"), ir.i32(1))),
+            ir.br("next"),
+          ]),
+        ]),
+        ir.call(this.runtimeFunction("join_strings"), get("strs"), ir.i32(bracketed ? 1 : 0), get("site")),
+      ],
+    });
+    return name;
+  }
+
+  private joinFunction(type: string, span: Span): string {
+    return this.showFunction(type, false, span);
+  }
+
+  /** `rt:copy:T`: a copy of an array, and of the arrays inside it (what `int[] b = a;` does). Other elements are shared. */
+  private copyFunction(type: string): string {
+    const name = `rt:copy:${mangle(type)}`;
+    if (this.runtime.has(name)) return name;
+    const elementType = elementOf(type);
+    const get = ir.get;
+    const bytes = ir.op("i32.add", ir.i32(ARRAY_HEADER), ir.op("i32.shl", get("n"), ir.i32(shiftOf(elementType))));
+    const nested: Expr[] = isArray(elementType)
+      ? [
+          ir.set("i", ir.i32(0)),
+          ir.block("done", [
+            ir.loop("next", [
+              ir.brIf("done", ir.op("i32.ge_u", get("i"), get("n"))),
+              ir.store(
+                "i32.store",
+                ir.op("i32.add", get("p"), ir.op("i32.shl", get("i"), ir.i32(2))),
+                ir.call(this.copyFunction(elementType), ir.load("i32.load", ir.op("i32.add", get("a"), ir.op("i32.shl", get("i"), ir.i32(2))), ARRAY_HEADER), get("site")),
+                ARRAY_HEADER,
+              ),
+              ir.set("i", ir.op("i32.add", get("i"), ir.i32(1))),
+              ir.br("next"),
+            ]),
+          ]),
+        ]
+      : [];
+    this.runtime.set(name, {
+      name,
+      params: [{ name: "a", type: "i32" }, { name: "site", type: "i32" }],
+      results: ["i32"],
+      locals: [{ name: "n", type: "i32" }, { name: "p", type: "i32" }, { name: "i", type: "i32" }],
+      body: [
+        ir.if(ir.op("i32.eqz", get("a")), [ir.return(ir.i32(0))]),
+        ir.set("n", ir.load("i32.load", get("a"))),
+        ir.set("p", ir.call(this.runtimeFunction("alloc"), bytes, get("site"))),
+        ir.op("memory.copy", get("p"), get("a"), bytes),
+        ...nested,
+        get("p"),
+      ],
+    });
+    return name;
+  }
+
   private call(e: Call): Expr {
+    if (e.callee.kind === "Member" && isArray(this.checked.types.get(e.callee.object) ?? "") && (e.callee.name === "join" || e.callee.name === "indexOf")) return this.arrayMethod(e, e.callee);
     if (e.callee.kind !== "Identifier") {
       this.unsupported(e.span, "a method call");
       return this.placeholder(e);
@@ -726,7 +1001,7 @@ class Lowerer {
   }
 }
 
-const MEMORY_RUNTIME = new Set<string>(["alloc", "int_to_str", "char_to_str", "float_to_str", "str_concat", "str_eq", "str_cmp"]);
+const MEMORY_RUNTIME = new Set<string>(MEMORY_RUNTIME_NAMES);
 const isMemoryRuntime = (name: string): name is MemoryRuntimeName => MEMORY_RUNTIME.has(name);
 
 function typeNameOfReturn(decl: FuncDecl): string {

@@ -22,7 +22,7 @@ describe("the whole corpus, compiled and interpreted", () => {
   });
 
   it("the compiler accepts at least as many corpus programs as it did at the last milestone", () => {
-    // T46: numbers, control flow, functions and strings. Raise this number when a task makes more programs compile.
-    expect(compiled.length).toBeGreaterThanOrEqual(17);
+    // T47: numbers, control flow, functions, strings and arrays. Raise this number when a task makes more programs compile.
+    expect(compiled.length).toBeGreaterThanOrEqual(29);
   });
 });
