@@ -74,7 +74,7 @@ export class ByteWriter {
     return this;
   }
 
-  toUint8Array(): Uint8Array {
+  toUint8Array(): Uint8Array<ArrayBuffer> {
     return Uint8Array.from(this.bytes);
   }
 }

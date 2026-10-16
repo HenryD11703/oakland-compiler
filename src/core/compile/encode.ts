@@ -10,7 +10,7 @@ export class EncodeError extends Error {}
  * format asks for. Written by hand, with no library (spec S-21); the engine's own `WebAssembly.validate` is the
  * independent check.
  */
-export function encode(module: Module): Uint8Array {
+export function encode(module: Module): Uint8Array<ArrayBuffer> {
   return new Encoder(module).encode();
 }
 
@@ -72,7 +72,7 @@ class Encoder {
     return this.types.length - 1;
   }
 
-  encode(): Uint8Array {
+  encode(): Uint8Array<ArrayBuffer> {
     const { module } = this;
     const out = new ByteWriter().raw(WASM.magic).raw(WASM.version);
     const s = WASM.section;

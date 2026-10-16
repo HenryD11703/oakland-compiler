@@ -16,15 +16,11 @@ function build(module: Module, imports: WebAssembly.Imports = {}): WebAssembly.E
   return new WebAssembly.Instance(new WebAssembly.Module(bytes), imports).exports;
 }
 
-const fn = (name: string, params: [string, "i32" | "f64"][], results: ("i32" | "f64")[], body: Func["body"], extra: Partial<Func> = {}): Func => ({
-  name,
-  params: params.map(([n, type]) => ({ name: n, type })),
-  results,
-  locals: [],
-  body,
-  export: name,
-  ...extra,
-});
+/** A function that is exported under its own name; `export: null` keeps it private. */
+const fn = (name: string, params: [string, "i32" | "f64"][], results: ("i32" | "f64")[], body: Func["body"], extra: Partial<Omit<Func, "export">> & { export?: string | null } = {}): Func => {
+  const { export: exported = name, ...rest } = extra;
+  return { name, params: params.map(([n, type]) => ({ name: n, type })), results, locals: [], body, ...rest, ...(exported === null ? {} : { export: exported }) };
+};
 
 const withFunctions = (...functions: Func[]): Module => ({ ...emptyModule, functions });
 
@@ -318,9 +314,9 @@ describe("memory, data, globals, tables and imports", () => {
       ...emptyModule,
       table: ["double", "negate", "square"],
       functions: [
-        fn("double", [["x", "i32"]], ["i32"], [ir.op("i32.mul", ir.get("x"), ir.i32(2))], { export: undefined }),
-        fn("negate", [["x", "i32"]], ["i32"], [ir.op("i32.sub", ir.i32(0), ir.get("x"))], { export: undefined }),
-        fn("square", [["x", "i32"]], ["i32"], [ir.op("i32.mul", ir.get("x"), ir.get("x"))], { export: undefined }),
+        fn("double", [["x", "i32"]], ["i32"], [ir.op("i32.mul", ir.get("x"), ir.i32(2))], { export: null }),
+        fn("negate", [["x", "i32"]], ["i32"], [ir.op("i32.sub", ir.i32(0), ir.get("x"))], { export: null }),
+        fn("square", [["x", "i32"]], ["i32"], [ir.op("i32.mul", ir.get("x"), ir.get("x"))], { export: null }),
         fn("apply", [["slot", "i32"], ["x", "i32"]], ["i32"], [ir.callIndirect(one, ir.get("slot"), ir.get("x"))]),
       ],
     };
@@ -334,7 +330,7 @@ describe("memory, data, globals, tables and imports", () => {
     const module: Module = {
       ...emptyModule,
       table: ["noop"],
-      functions: [fn("noop", [["a", "f64"], ["b", "i32"]], [], [], { export: undefined }), fn("go", [], [], [ir.callIndirect(odd, ir.i32(0), ir.f64(1), ir.i32(2))])],
+      functions: [fn("noop", [["a", "f64"], ["b", "i32"]], [], [], { export: null }), fn("go", [], [], [ir.callIndirect(odd, ir.i32(0), ir.f64(1), ir.i32(2))])],
     };
     expect(() => (build(module) as Record<string, () => void>).go?.()).not.toThrow();
   });
@@ -344,7 +340,7 @@ describe("memory, data, globals, tables and imports", () => {
     const module: Module = {
       ...emptyModule,
       imports: [{ module: "env", field: "log", name: "log", signature: { params: ["i32"], results: [] } }],
-      functions: [fn("main", [], [], [ir.call("log", ir.i32(1)), ir.call("log", ir.i32(2))], { export: undefined })],
+      functions: [fn("main", [], [], [ir.call("log", ir.i32(1)), ir.call("log", ir.i32(2))], { export: null })],
       start: "main",
     };
     build(module, { env: { log: (n: number) => seen.push(n) } });
