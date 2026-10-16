@@ -1,6 +1,6 @@
 # Stage 2 — Technical plan
 
-> Status: **DRAFT, waiting for Henry's approval.** Continues the numbering of `docs/02-plan.md` (D1 to D12). Each decision lists what was rejected and why.
+> Status: **approved by Henry on 2026-10-15**, with the spec (see its status line). Continues the numbering of `docs/02-plan.md` (D1 to D12). Each decision lists what was rejected and why.
 
 ## Shape of the code
 

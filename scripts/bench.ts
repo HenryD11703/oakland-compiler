@@ -1,9 +1,17 @@
 // Times the interpreter on the programs in bench/. Run with `npm run bench`.
 // Usage: npm run bench [-- --runs 5]
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { cpus } from "node:os";
 import { join } from "node:path";
-import { run } from "../src/core/index";
+import { pathToFileURL } from "node:url";
+
+// The core is built with Vite first, as it is for the site. Running the TypeScript through tsx would add
+// esbuild's `keepNames` helper to every closure and make the interpreter two to three times slower than it is.
+const root = join(import.meta.dirname, "..");
+const outDir = join(root, "node_modules", ".cache", "oakland-bench");
+execFileSync("npx", ["vite", "build", "--ssr", "src/core/index.ts", "--outDir", outDir, "--emptyOutDir", "--logLevel", "error"], { cwd: root, stdio: "inherit" });
+const { run } = (await import(pathToFileURL(join(outDir, "index.js")).href)) as typeof import("../src/core/index");
 
 const runsArg = process.argv.indexOf("--runs");
 const RUNS = runsArg > 0 ? Number(process.argv[runsArg + 1]) : 5;
@@ -25,7 +33,7 @@ function time(source: string, trace: boolean): { ms: number; stdout: string; ste
   return { ms, stdout: result.stdout.trim(), steps: result.steps };
 }
 
-const dir = join(import.meta.dirname, "..", "bench");
+const dir = join(root, "bench");
 const files = readdirSync(dir).filter((f) => f.endsWith(".oak")).sort();
 
 console.log(`Node ${process.version} on ${cpus()[0]?.model ?? "unknown CPU"} (${cpus().length} threads), median of ${RUNS} runs after one warm-up\n`);

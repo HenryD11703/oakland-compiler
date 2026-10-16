@@ -1,10 +1,10 @@
 # Stage 2 — Tasks
 
-> Status: **DRAFT, waiting for Henry's approval of the spec and the plan (gate a).** Nothing here is started. Numbering continues from `docs/03-tasks.md` (T01 to T28). Order matters. Each task has a "done when" and the criteria (S-xx) from `01-spec.md` it covers. Estimates are in work sessions (one sitting of focused work) and are honest and rough: **about 24 to 30 sessions in all**, and the plan says what to cut if that is too much.
+> Status: **approved by Henry on 2026-10-15** (gate a). T30 and T31 are done; the rest is not started. Numbering continues from `docs/03-tasks.md` (T01 to T28). Order matters. Each task has a "done when" and the criteria (S-xx) from `01-spec.md` it covers. Estimates are in work sessions (one sitting of focused work) and are honest and rough: **about 24 to 30 sessions in all**, and the plan says what to cut if that is too much.
 
 ## Phase 0 — Before any code (1 session)
-- **T30 Baseline and benchmarks.** Write `npm run bench` with the four programs of S-22 and run it against the interpreter as it is today, with and without the trace. *Done when:* a table with the Node version, the CPU and the medians of five runs is committed. Covers: S-22 (the "before" half). It also answers the open question of stage 1: how much of the 4.8 s on the million-iteration loop is the trace.
-- **T31 Gate (a).** Henry answers the five questions at the end of the spec. *Done when:* the spec says "approved" and the [Henry?] marks are resolved.
+- ✅ **T30 Baseline and benchmarks.** Write `npm run bench` with the four programs of S-22 and run it against the interpreter as it is today, with and without the trace. *Done when:* a table with the Node version, the CPU and the medians of five runs is committed. Covers: S-22 (the "before" half). It also answers the open question of stage 1: how much of the 4.8 s on the million-iteration loop is the trace.
+- ✅ **T31 Gate (a).** Henry answers the five questions at the end of the spec. *Done when:* the spec says "approved" and the [Henry?] marks are resolved.
 
 ## Phase A — Classes in the interpreter (5 sessions)
 - **T32 Grammar and lexer.** `class`, `extends`, `new`, `this`, `super`, `private`, `public` as keywords; `grammar.ebnf` first. *Done when:* every stage 1 program still tokenises and parses, and a name that starts with one of the new words (`classic`, `newest`) is still a valid name. Covers: S-01, S-04, S-07 (syntax).

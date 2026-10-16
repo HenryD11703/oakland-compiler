@@ -1,6 +1,6 @@
 # Stage 2 — Spec: classes and a WebAssembly compiler
 
-> Status: **DRAFT, waiting for Henry's approval (gate a).** Items marked **[Henry?]** are my proposals where nothing was decided; each needs a yes or a no. Stage 1 (the interpreter playground, `docs/00-principles.md` to `03-tasks.md`) is done and stays as it is. Stage 2 adds two things Henry asked for on 2026-10-14 and confirmed on 2026-10-15: **classes** and **compiling OakLand to WebAssembly**.
+> Status: **approved by Henry on 2026-10-15** (gate a). Henry said "give me everything recommended" without reading the document first, so the five questions at the end are answered **yes, as recommended**, and every **[Henry?]** item below stands as written. He can still change any of them; if he does, this line says so. Items marked **[Henry?]** were my proposals where nothing was decided. Stage 1 (the interpreter playground, `docs/00-principles.md` to `03-tasks.md`) is done and stays as it is. Stage 2 adds two things Henry asked for on 2026-10-14 and confirmed on 2026-10-15: **classes** and **compiling OakLand to WebAssembly**.
 
 ## What it is
 
