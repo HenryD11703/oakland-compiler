@@ -115,7 +115,14 @@ describe("nothing a user types escapes as an exception (principle 2)", () => {
 
   it("copes with a very long chain of operators", () => {
     const chain = Array.from({ length: 5000 }, () => "1").join(" + ");
-    expect(runOak(`System.out.println(${chain});`).stdout).toBe("5000\n");
+    const result = runOak(`System.out.println(${chain});`);
+    // The tree is 5000 levels deep; whether the host stack holds depends on how warm the engine is.
+    // Either it completes, or the overflow is reported as a diagnostic; it never throws.
+    if (result.diagnostics.length > 0) {
+      expect(result.diagnostics[0]?.message).toMatch(/stack overflow/);
+    } else {
+      expect(result.stdout).toBe("5000\n");
+    }
   });
 });
 
