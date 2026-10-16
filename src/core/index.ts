@@ -9,6 +9,8 @@ export { MAX_NESTING, MAX_SYNTAX_ERRORS, parse } from "./parser/parser";
 export type { ParseResult } from "./parser/parser";
 export { check } from "./check/check";
 export type { CheckResult } from "./check/check";
+export { compile, runCompiled } from "./compile/index";
+export type { CompileResult, CompiledRun } from "./compile/index";
 export { run } from "./run";
 export type { RunOptions, RunResult } from "./run";
 export type { AstNode } from "./astView";

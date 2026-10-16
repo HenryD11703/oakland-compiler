@@ -40,6 +40,8 @@ export interface CheckResult {
   /** The static type of every expression it looked at (`error` when the expression was wrong). */
   readonly types: ReadonlyMap<Expression, string>;
   readonly classes: ClassTable;
+  /** The functions declared at the top level of the program, by name. */
+  readonly functions: ReadonlyMap<string, FuncDecl>;
 }
 
 const ERROR = "error";
@@ -66,7 +68,7 @@ export function check(program: Program): CheckResult {
     seen.add(key);
     return true;
   });
-  return { diagnostics: unique.sort(compareDiagnostics), types: checker.types, classes: checker.table };
+  return { diagnostics: unique.sort(compareDiagnostics), types: checker.types, classes: checker.table, functions: checker.functions };
 }
 
 /** What the function being checked allows a `return` to do. */
@@ -95,6 +97,7 @@ const needsAssignment = (type: string): boolean => type === "int" || type === "f
 class Checker {
   readonly diagnostics: Diagnostic[] = [];
   readonly types = new Map<Expression, string>();
+  readonly functions = new Map<string, FuncDecl>();
   private readonly seen = new Set<string>();
   private readonly global = new Scope(null);
   private scope: Scope = this.global;
@@ -224,6 +227,8 @@ class Checker {
       } else if (statement.kind === "FuncDecl") {
         if (!this.scope.declare({ kind: "function", name: statement.name, decl: statement })) {
           this.report(statement.nameSpan, `'${statement.name}' is already declared in this scope`);
+        } else if (this.scope === this.global) {
+          this.functions.set(statement.name, statement);
         }
       } else if (statement.kind === "ClassDecl") {
         classes.push(statement);
