@@ -7,7 +7,8 @@ import { runOak } from "../helpers/run";
 describe("limits (AC-24, core part)", () => {
   it("stops an infinite loop with a diagnostic and keeps the output so far", () => {
     const started = Date.now();
-    const result = runOak('System.out.println("before"); while (true) { } System.out.println("after");');
+    // A small step limit, so that a slow machine ends on the step limit and not on the 5 s clock.
+    const result = runOak('System.out.println("before"); while (true) { } System.out.println("after");', { maxSteps: 500_000 });
     expect(Date.now() - started).toBeLessThan(5500);
     expect(result.stdout).toBe("before\n");
     expect(result.stoppedEarly).toBe(true);
@@ -18,7 +19,7 @@ describe("limits (AC-24, core part)", () => {
   });
 
   it("points at the statement that was running", () => {
-    const result = runOak("int i = 0;\nwhile (true) {\n  i = i + 1;\n}");
+    const result = runOak("int i = 0;\nwhile (true) {\n  i = i + 1;\n}", { maxSteps: 500_000 });
     expect(result.diagnostics[0]?.span.start.line).toBeGreaterThanOrEqual(2);
   });
 
