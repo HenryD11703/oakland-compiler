@@ -153,18 +153,18 @@ export function Timeline({ trace, series, lineCount, totalOutput, step, onSeek, 
       <div className="chart" ref={frame}>
         <svg width={width} height={geometry.total} viewBox={`0 0 ${width} ${geometry.total}`} aria-hidden="true">
           {geometry.rows.slice(0, -1).map((row) => (
-            <line key={row.name} x1={0} x2={width} y1={row.top + row.height + 0.5} y2={row.top + row.height + 0.5} stroke="#cdc5b0" />
+            <line key={row.name} x1={0} x2={width} y1={row.top + row.height + 0.5} y2={row.top + row.height + 0.5} className="tl-rule" />
           ))}
-          <path d={paths.line} stroke="#14130f" strokeWidth={1} fill="none" />
-          <path d={paths.held} fill="#14130f" />
-          <path d={paths.notHeld} fill="#d8d0bb" />
-          <path d={paths.area} fill="rgba(201,52,14,0.12)" />
-          <path d={paths.outline} stroke="#c9340e" strokeWidth={1.2} fill="none" />
+          <path d={paths.line} className="tl-ink-line" strokeWidth={1} />
+          <path d={paths.held} className="tl-held" />
+          <path d={paths.notHeld} className="tl-not-held" />
+          <path d={paths.area} className="tl-area" />
+          <path d={paths.outline} className="tl-mark-line" strokeWidth={1.2} />
           {paths.series.map((d, i) => (
-            <path key={lanes.series[i]?.name} d={d} stroke={i === 0 ? "#14130f" : "#675f4e"} strokeWidth={1} fill="none" />
+            <path key={lanes.series[i]?.name} d={d} className={i === 0 ? "tl-ink-line" : "tl-dim-line"} strokeWidth={1} />
           ))}
-          <line x1={headX} x2={headX} y1={0} y2={geometry.total} stroke="#c9340e" strokeWidth={2} />
-          <rect x={headX - 5} y={0} width={10} height={8} fill="#c9340e" />
+          <line x1={headX} x2={headX} y1={0} y2={geometry.total} className="tl-mark-line" strokeWidth={2} />
+          <rect x={headX - 5} y={0} width={10} height={8} className="tl-mark-fill" />
         </svg>
         <div
           role="slider"

@@ -272,6 +272,61 @@ test.describe("layout (AC-33)", () => {
       await expect(page.locator(".vars")).toBeVisible();
     }
   });
+
+  test("the dividers resize the panels from the keyboard, and the sizes survive a reload", async ({ page }, info) => {
+    test.skip(info.project.name === "mobile", "on a phone the panels are tabs and there are no dividers");
+    const side = page.locator(".side");
+    const vars = page.locator(".vars");
+    const width = async (): Promise<number> => (await side.boundingBox())?.width ?? 0;
+    const height = async (): Promise<number> => (await vars.boundingBox())?.height ?? 0;
+
+    const before = await width();
+    const sideDivider = page.getByRole("separator", { name: /code and the side panels/ });
+    await sideDivider.focus();
+    await page.keyboard.press("Shift+ArrowLeft");
+    await expect.poll(width).toBeGreaterThan(before + 50);
+    const widened = await width();
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Shift+ArrowRight");
+    await expect.poll(width).toBeLessThan(widened - 50);
+
+    const varsDivider = page.getByRole("separator", { name: /variables and the views/ });
+    await varsDivider.focus();
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect.poll(height).toBeGreaterThan(0);
+    const taller = await height();
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect.poll(height).toBeGreaterThan(taller + 30);
+
+    const kept = await width();
+    await page.reload();
+    await waitForRun(page);
+    expect(Math.abs((await width()) - kept)).toBeLessThan(2);
+
+    // Enter on a divider puts the panel back to its default size.
+    await page.getByRole("separator", { name: /code and the side panels/ }).focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => Math.abs((await width()) - kept)).toBeGreaterThan(20);
+  });
+
+  test("a divider can be dragged with the mouse", async ({ page }, info) => {
+    test.skip(info.project.name === "mobile", "on a phone the panels are tabs and there are no dividers");
+    const side = page.locator(".side");
+    const before = (await side.boundingBox())?.width ?? 0;
+    const box = await page.getByRole("separator", { name: /code and the side panels/ }).boundingBox();
+    if (!box) throw new Error("no divider");
+    await page.mouse.move(box.x + box.width / 2, box.y + 200);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 120, box.y + 200, { steps: 6 });
+    await page.mouse.up();
+    await expect.poll(async () => (await side.boundingBox())?.width ?? 0).toBeGreaterThan(before + 80);
+  });
+
+  test("the output is readable and scrolls inside its own panel", async ({ page }, info) => {
+    test.skip(info.project.name === "mobile", "the phone shows the views as a tab of their own");
+    const size = await page.getByTestId("output").evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    expect(size).toBeGreaterThanOrEqual(13);
+  });
 });
 
 test.describe("accessibility (AC-34)", () => {

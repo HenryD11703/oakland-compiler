@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { parse } from "../core/parser/parser";
 import { renderValue, TraceReplayer } from "../core/trace/replay";
 import { DEFAULT_EXAMPLE, EXAMPLES } from "../examples";
@@ -6,7 +6,9 @@ import { RunClient } from "../worker/client";
 import type { RunOutcome } from "../worker/protocol";
 import type { EditorHandle, InlineEntry } from "./Editor";
 import { assignedNames } from "./inlineValues";
+import { DEFAULT_LAYOUT, loadLayout, saveLayout, type Layout } from "./layout";
 import { AstTree, count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
+import { Splitter } from "./Splitter";
 import { Timeline } from "./Timeline";
 
 type Tab = "out" | "problems" | "tree" | "symbols";
@@ -65,6 +67,33 @@ export function App() {
   const [tab, setTab] = useState<Tab>("out");
   const [view, setView] = useState<View>("code");
   const [menu, setMenu] = useState(false);
+  const [layout, setLayout] = useState<Layout>(loadLayout);
+
+  // ---------- panel sizes ----------
+
+  const sheetRef = useRef<HTMLElement>(null);
+  const sideRef = useRef<HTMLElement>(null);
+  const nowRef = useRef<HTMLElement>(null);
+  const varsRef = useRef<HTMLElement>(null);
+
+  const resize = useCallback((part: keyof Layout, size: number | null) => {
+    setLayout((before) => {
+      const next = { ...before, [part]: size };
+      saveLayout(next);
+      return next;
+    });
+  }, []);
+  const resizeSide = useCallback((size: number) => resize("side", size), [resize]);
+  const resizeVars = useCallback((size: number) => resize("vars", size), [resize]);
+  const resetSide = useCallback(() => resize("side", DEFAULT_LAYOUT.side), [resize]);
+  const resetVars = useCallback(() => resize("vars", DEFAULT_LAYOUT.vars), [resize]);
+  // The code keeps at least 360 px, the views at least 160 px; the dividers are 9 px.
+  const maxSide = useCallback(() => (sheetRef.current?.clientWidth ?? 0) - 360 - 9, []);
+  const maxVars = useCallback(() => (sideRef.current?.clientHeight ?? 0) - (nowRef.current?.offsetHeight ?? 0) - 160 - 9, []);
+  const sheetStyle: CSSProperties & Record<string, string | undefined> = {
+    "--side-w": layout.side === null ? undefined : `${layout.side}px`,
+    "--vars-h": layout.vars === null ? undefined : `${layout.vars}px`,
+  };
 
   // ---------- running ----------
 
@@ -323,7 +352,7 @@ export function App() {
         </div>
       </nav>
 
-      <main className="sheet" data-view={view}>
+      <main className="sheet" data-view={view} ref={sheetRef} style={sheetStyle}>
         <Suspense
           fallback={
             <div className="code">
@@ -334,8 +363,10 @@ export function App() {
           <Editor ref={editor} initialText={initial.text} onChange={onEdit} onRun={() => void run()} diagnostics={diagnostics} activeSpan={activeSpan} inline={inline} />
         </Suspense>
 
-        <aside className="side">
-          <section className="block now" aria-label="Current step">
+        <Splitter orientation="vertical" target={sideRef} label="Resize the code and the side panels" min={320} max={maxSide} grow={-1} onResize={resizeSide} onReset={resetSide} />
+
+        <aside className="side" ref={sideRef}>
+          <section className="block now" aria-label="Current step" ref={nowRef}>
             <div className="label">Now</div>
             <div className="big" data-testid="readout">
               {trace && step >= 0 ? (
@@ -377,10 +408,12 @@ export function App() {
             </div>
           </section>
 
-          <section className="block vars" aria-label="Variables" tabIndex={0}>
+          <section className="block vars" aria-label="Variables" tabIndex={0} ref={varsRef}>
             <div className="label">Variables</div>
             <VariablesTable state={showingRun ? state : null} changes={changes} />
           </section>
+
+          <Splitter orientation="horizontal" target={varsRef} label="Resize the variables and the views" min={72} max={maxVars} grow={1} onResize={resizeVars} onReset={resetVars} />
 
           <section className="block views" aria-label="Views">
             <div role="tablist" className="tabs" aria-label="Views">
@@ -398,16 +431,16 @@ export function App() {
                 </button>
               ))}
             </div>
-            <div role="tabpanel" id="pane-out" aria-labelledby="tab-out" hidden={tab !== "out"}>
+            <div role="tabpanel" id="pane-out" aria-labelledby="tab-out" hidden={tab !== "out"} tabIndex={0}>
               <OutputView text={stdout} total={totalLines} ran={result ? result.ran || syntax.length === 0 : true} />
             </div>
-            <div role="tabpanel" id="pane-problems" aria-labelledby="tab-problems" hidden={tab !== "problems"}>
+            <div role="tabpanel" id="pane-problems" aria-labelledby="tab-problems" hidden={tab !== "problems"} tabIndex={0}>
               <ProblemsList diagnostics={diagnostics} onPick={reveal} />
             </div>
-            <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"}>
+            <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"} tabIndex={0}>
               <AstTree ast={result?.ast ?? null} onPick={reveal} />
             </div>
-            <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"}>
+            <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"} tabIndex={0}>
               <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} />
             </div>
           </section>
