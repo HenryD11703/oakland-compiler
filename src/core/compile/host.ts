@@ -17,6 +17,10 @@ export const HOST_IMPORTS = {
   write_char: { params: ["i32"], results: [] },
   /** A string object (a length, then its code units); 0 prints `null`. */
   write_string: { params: ["i32"], results: [] },
+  /** A float as Java text: the host formats it and keeps the text, and answers with its length; `take_text` then copies it. */
+  format_float: { params: ["f64"], results: ["i32"] },
+  /** Copies the text of the last `format_float` to `ptr`, as 16-bit code units. */
+  take_text: { params: ["i32"], results: [] },
   /** `a % b` for floats: the one operation WebAssembly has no instruction for. */
   fmod: { params: ["f64", "f64"], results: ["f64"] },
 } as const;
@@ -65,6 +69,7 @@ export interface HostOutput {
 /** Builds the `env` object a compiled module is instantiated with. `memory()` gives the module's memory once it exists. */
 export function makeHost(sites: readonly FailSite[], limits: HostLimits, memory: () => WebAssembly.Memory, output: HostOutput): Record<HostName, (...args: never[]) => unknown> {
   let written = 0;
+  let pending = "";
   let lastSite: FailSite | null = null;
   const emit = (text: string): void => {
     written += text.length;
@@ -86,6 +91,14 @@ export function makeHost(sites: readonly FailSite[], limits: HostLimits, memory:
     write_bool: (b: number): void => emit(b !== 0 ? "true" : "false"),
     write_char: (code: number): void => emit(String.fromCharCode(code & 0xffff)),
     write_string: (ptr: number): void => emit(readString(memory(), ptr)),
+    format_float: (x: number): number => {
+      pending = formatFloat(x);
+      return pending.length;
+    },
+    take_text: (ptr: number): void => {
+      const units = new Uint16Array(memory().buffer, ptr, pending.length);
+      for (let i = 0; i < pending.length; i++) units[i] = pending.charCodeAt(i);
+    },
     fmod: (a: number, b: number): number => a % b,
   } as unknown as Record<HostName, (...args: never[]) => unknown>;
 }

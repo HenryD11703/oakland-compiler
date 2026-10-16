@@ -19,6 +19,7 @@ import type {
 import type { Span } from "../span";
 import { INT_MAX, INT_MIN } from "../types";
 import { HOST_IMPORTS, type FailSite, type HostName } from "./host";
+import { HEAP, MAX_PAGES, memoryRuntime, type MemoryRuntimeName } from "./runtime";
 import { emptyModule, ir, type DataSegment, type Expr, type Func, type Global, type Import, type Local, type Module, type ValType } from "./ir";
 
 /** What `lower` produces: the module, the table of places that can fail, and what it could not translate. */
@@ -121,7 +122,10 @@ class Lowerer {
       signature: { params: HOST_IMPORTS[name].params as readonly ValType[], results: HOST_IMPORTS[name].results as readonly ValType[] },
     }));
     const pages = Math.max(1, Math.ceil(this.dataEnd / PAGE));
-    return { ...emptyModule, imports, functions: [...this.functions, ...this.runtime.values()], globals: this.globals, memory: { min: pages }, data: this.data };
+    // The first free address is right after the static data, rounded up to a multiple of 8.
+    const heapStart = (this.dataEnd + 7) & ~7;
+    const globals = this.globals.map((g) => (g.name === HEAP ? { ...g, init: heapStart } : g));
+    return { ...emptyModule, imports, functions: [...this.functions, ...this.runtime.values()], globals, memory: { min: pages, max: MAX_PAGES }, data: this.data };
   }
 
   // ---------- small helpers ----------
@@ -345,7 +349,7 @@ class Lowerer {
    */
   private switchStatement(s: Switch): Expr[] {
     const subjectType = this.typeOf(s.discriminant);
-    if (!isWhole(subjectType) && subjectType !== "float") {
+    if (!isWhole(subjectType) && subjectType !== "float" && subjectType !== "string") {
       this.unsupported(s.discriminant.span, `a switch on a ${subjectType}`);
       return [];
     }
@@ -359,7 +363,9 @@ class Lowerer {
     s.cases.forEach((branch, i) => {
       const testType = this.typeOf(branch.test);
       const common = subjectType === "float" || testType === "float" ? "float" : "int";
-      const equal = common === "float"
+      const equal = subjectType === "string"
+        ? (testType === "string" ? ir.call(this.runtimeFunction("str_eq"), ir.get(subject), this.expression(branch.test)) : ir.op("i32.eq", ir.get(subject), this.expression(branch.test)))
+        : common === "float"
         ? ir.op("f64.eq", this.convert(ir.get(subject), subjectType, "float"), this.convert(this.expression(branch.test), testType, "float"))
         : ir.op("i32.eq", ir.get(subject), this.expression(branch.test));
       dispatch.push(ir.if(equal, [ir.br(labels[i] as string)]));
@@ -512,12 +518,14 @@ class Lowerer {
     if (e.op === "==" || e.op === "!=") return this.equality(e, left, right);
 
     if (e.op === "+" && (left === "string" || right === "string")) {
-      this.unsupported(e.span, "joining strings");
-      return ir.i32(0);
+      const site = this.site(e.span, "out of memory");
+      return this.concat(this.toText(this.expression(e.left), left, site, e.left.span), this.toText(this.expression(e.right), right, site, e.right.span), site);
     }
     if (left === "string" && right === "string") {
-      this.unsupported(e.span, "comparing strings");
-      return ir.i32(0);
+      const order = this.runtimeFunction("str_cmp");
+      const cmp = ir.call(order, this.expression(e.left), this.expression(e.right), ir.i32(this.site(e.span, `cannot apply '${e.op}' to null`)));
+      const test = { "<": "i32.lt_s", "<=": "i32.le_s", ">": "i32.gt_s", ">=": "i32.ge_s" }[e.op as "<" | "<=" | ">" | ">="];
+      return ir.op(test as "i32.lt_s", cmp, ir.i32(0));
     }
 
     const wide = left === "float" || right === "float";
@@ -579,8 +587,8 @@ class Lowerer {
   private equality(e: Binary, left: string, right: string): Expr {
     const same = e.op === "==";
     if (left === "string" && right === "string") {
-      this.unsupported(e.span, "comparing strings");
-      return ir.i32(0);
+      const equal = ir.call(this.runtimeFunction("str_eq"), this.expression(e.left), this.expression(e.right));
+      return same ? equal : ir.op("i32.eqz", equal);
     }
     if (left === "float" || right === "float") {
       const a = this.convert(this.expression(e.left), left, "float");
@@ -612,8 +620,9 @@ class Lowerer {
       value = this.convert(value, valueType, targetType);
     } else {
       if (targetType === "string") {
-        this.unsupported(e.span, "joining strings");
-        return asValue ? this.placeholder(e) : ir.nop();
+        const site = this.site(e.span, "out of memory");
+        value = this.concat(this.read(binding), this.toText(value, valueType, site, e.value.span), site);
+        return this.finishAssign(binding, value, targetType, asValue);
       }
       const wide = targetType === "float" || valueType === "float";
       const current = this.convert(this.read(binding), targetType, wide ? "float" : "int");
@@ -621,8 +630,38 @@ class Lowerer {
       const synthetic: Binary = { kind: "Binary", op: e.op === "+=" ? "+" : "-", left: e.target, right: e.value, span: e.span };
       value = this.convert(wide ? this.floatOp(synthetic, current, operand) : this.intOp(synthetic, current, operand), wide ? "float" : "int", targetType);
     }
+    return this.finishAssign(binding, value, targetType, asValue);
+  }
+
+  private finishAssign(binding: Binding, value: Expr, targetType: string, asValue: boolean): Expr {
     if (!asValue) return this.write(binding, value);
     return binding.kind === "local" ? ir.tee(binding.wasm, value) : ir.block(this.fresh("assign"), [this.write(binding, value), this.read(binding)], valType(targetType));
+  }
+
+  // ---------- strings ----------
+
+  private concat(a: Expr, b: Expr, site: number): Expr {
+    return ir.call(this.runtimeFunction("str_concat"), a, b, ir.i32(site));
+  }
+
+  /** A value as the text that joining it to a string shows (like `display` in the interpreter), as a string object. */
+  private toText(value: Expr, type: string, site: number, span: Span): Expr {
+    switch (type) {
+      case "string":
+      case "null":
+        return value;
+      case "int":
+        return ir.call(this.runtimeFunction("int_to_str"), value, ir.i32(site));
+      case "char":
+        return ir.call(this.runtimeFunction("char_to_str"), value, ir.i32(site));
+      case "float":
+        return ir.call(this.runtimeFunction("float_to_str"), value, ir.i32(site));
+      case "boolean":
+        return ir.if(value, [ir.i32(this.stringLiteral("true"))], [ir.i32(this.stringLiteral("false"))], "i32");
+      default:
+        this.unsupported(span, `joining a ${type} to a string`);
+        return ir.i32(0);
+    }
   }
 
   private call(e: Call): Expr {
@@ -643,9 +682,17 @@ class Lowerer {
   // ---------- the runtime: small functions the module carries with it ----------
 
   /** A runtime function, added to the module the first time something needs it. */
-  private runtimeFunction(name: "div_i32" | "rem_i32" | "div_f64" | "rem_f64"): string {
+  private runtimeFunction(name: "div_i32" | "rem_i32" | "div_f64" | "rem_f64" | MemoryRuntimeName): string {
     const full = `rt:${name}`;
     if (this.runtime.has(full)) return full;
+    if (isMemoryRuntime(name)) {
+      // The allocator needs the global that holds the first free address; it is given its value when the module is built.
+      if (name === "alloc") this.globals.push({ name: HEAP, type: "i32", mutable: true, init: 0 });
+      const needs = { host: (n: HostName) => this.host(n), call: (n: MemoryRuntimeName) => this.runtimeFunction(n), literal: (text: string) => this.stringLiteral(text) };
+      // Registered after it is built: a function that needs another one builds it first, and none needs itself.
+      this.runtime.set(full, memoryRuntime(name, needs));
+      return full;
+    }
     const fail = (): Expr[] => [ir.call(this.host("fail"), ir.get("site"), ir.i32(0), ir.i32(0)), ir.unreachable()];
     const params = (type: ValType): Local[] => [{ name: "a", type }, { name: "b", type }, { name: "site", type: "i32" }];
     let func: Func;
@@ -678,6 +725,9 @@ class Lowerer {
     return full;
   }
 }
+
+const MEMORY_RUNTIME = new Set<string>(["alloc", "int_to_str", "char_to_str", "float_to_str", "str_concat", "str_eq", "str_cmp"]);
+const isMemoryRuntime = (name: string): name is MemoryRuntimeName => MEMORY_RUNTIME.has(name);
 
 function typeNameOfReturn(decl: FuncDecl): string {
   return decl.returnType.name + "[]".repeat(decl.returnType.dims);
