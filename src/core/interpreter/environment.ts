@@ -1,4 +1,5 @@
-import type { Access, ClassDecl, ClassField, CtorDecl, FuncDecl, Initializer, MethodDecl, StructDecl } from "../parser/ast";
+import type { ClassInfo } from "../classes";
+import type { FuncDecl, StructDecl } from "../parser/ast";
 import type { Span } from "../span";
 import type { StructField } from "./values";
 
@@ -30,47 +31,7 @@ export interface StructEntry {
   readonly declaredAt: Span;
 }
 
-/** A field of a class, with the class that declared it (a parent's field keeps its parent as owner). */
-export interface ClassFieldInfo {
-  readonly name: string;
-  readonly type: string;
-  readonly access: Access;
-  readonly owner: ClassEntry;
-  readonly init: Initializer | null;
-  readonly decl: ClassField;
-}
-
-export interface MethodEntry {
-  readonly name: string;
-  readonly decl: MethodDecl;
-  readonly owner: ClassEntry;
-  readonly access: Access;
-}
-
-export interface CtorEntry {
-  readonly decl: CtorDecl;
-  readonly owner: ClassEntry;
-  readonly access: Access;
-}
-
-/** A class as the interpreter knows it once its declaration has been checked. */
-export interface ClassEntry {
-  readonly kind: "class";
-  readonly name: string;
-  readonly decl: ClassDecl;
-  /** The parent class, or null (also null when the declared parent was wrong: that was reported). */
-  parent: ClassEntry | null;
-  /** Every field an object has, the parent's first. */
-  fields: ClassFieldInfo[];
-  /** Only the methods this class declares; use `findMethod` to include the inherited ones. */
-  readonly methods: Map<string, MethodEntry>;
-  readonly ctors: CtorEntry[];
-  readonly declaredAt: Span;
-  /** `new`: not looked at yet; `visiting`: being completed (a cycle if met again); `done`. */
-  state: "new" | "visiting" | "done";
-}
-
-export type Entry = Binding | FunctionEntry | StructEntry | ClassEntry;
+export type Entry = Binding | FunctionEntry | StructEntry | ClassInfo;
 
 /** One scope. Variables, functions and structs share one namespace, like in Java. */
 export class Environment {

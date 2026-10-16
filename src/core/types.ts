@@ -1,4 +1,4 @@
-import type { TypeRef } from "../parser/ast";
+import type { TypeRef } from "./parser/ast";
 
 /**
  * Types are plain strings, the same strings `typeof` returns:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrayTypeOf, baseTypeOf, elementTypeOf, isArrayType, isAssignable, isNumeric } from "../../src/core/interpreter/types";
+import { arrayTypeOf, baseTypeOf, elementTypeOf, isArrayType, isAssignable, isNumeric } from "../../src/core/types";
 import { deepCopyArray, defaultFor, display, formatFloat, OakArray, OakStruct } from "../../src/core/interpreter/values";
 
 describe("float text, like Java (AC-02)", () => {

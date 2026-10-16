@@ -1,4 +1,4 @@
-import { INT_MAX, INT_MIN, isArrayType } from "./types";
+import { INT_MAX, INT_MIN, isArrayType } from "../types";
 import { display, ERROR, OakArray, type Value } from "./values";
 
 /** What a built-in may do: report a problem (returns the value to give back) and read the clock. */

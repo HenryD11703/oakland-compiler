@@ -1,6 +1,6 @@
 import type { Binding } from "../interpreter/environment";
 import { display, OakArray, OakStruct, type Value } from "../interpreter/values";
-import { elementTypeOf } from "../interpreter/types";
+import { elementTypeOf } from "../types";
 import type { Span } from "../span";
 import {
   MAX_TRACE_ITEMS,

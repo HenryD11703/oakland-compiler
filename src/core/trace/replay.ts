@@ -1,4 +1,4 @@
-import { elementTypeOf } from "../interpreter/types";
+import { elementTypeOf } from "../types";
 import type { Part, Trace, TraceEvent, TraceObject, TraceStep } from "./types";
 
 export interface ReplayVar {

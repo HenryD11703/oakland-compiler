@@ -1,3 +1,4 @@
+import { ClassTable, methodSignature, type ClassInfo, type CtorInfo, type FieldInfo, type MethodInfo } from "../classes";
 import { diagnostic, type Diagnostic, type Phase } from "../diagnostics";
 import type {
   ArrayLiteral,
@@ -33,7 +34,7 @@ import { SymbolCollector, type SymbolEntry, type SymbolKind } from "../symbols";
 import { TraceRecorder } from "../trace/recorder";
 import type { Trace } from "../trace/types";
 import { BUILTINS } from "./builtins";
-import { Environment, type Binding, type ClassEntry, type ClassFieldInfo, type CtorEntry, type Entry, type FunctionEntry, type MethodEntry, type StructEntry } from "./environment";
+import { Environment, type Binding, type Entry, type FunctionEntry, type StructEntry } from "./environment";
 import { DEFAULT_LIMITS, MAX_DIAGNOSTICS, RunAbort, type RunLimits } from "./limits";
 import {
   arrayTypeOf,
@@ -46,7 +47,7 @@ import {
   isNumeric,
   isPrimitive,
   typeNameOf,
-} from "./types";
+} from "../types";
 import {
   deepCopyArray,
   defaultFor,
@@ -112,7 +113,7 @@ interface Location {
 interface FieldRef {
   readonly kind: "field";
   readonly object: OakObject;
-  readonly info: ClassFieldInfo;
+  readonly info: FieldInfo;
 }
 
 /** What a method or a constructor needs to look like a function when it runs. */
@@ -145,7 +146,17 @@ class Interpreter {
   private diagnosticsFull = false;
   private readonly global = new Environment(null, "global");
   /** Every class of the program by name. Classes live at the top level, so one table is enough. */
-  private readonly classes = new Map<string, ClassEntry>();
+  private readonly table = new ClassTable({
+    register: (info) => {
+      if (this.global.declare(info)) return true;
+      this.semantic(info.decl.nameSpan, `'${info.name}' is already declared in this scope`);
+      return false;
+    },
+    typeExists: (type) => this.typeExists(type, this.global),
+    isStruct: (name) => this.global.lookup(name)?.kind === "struct",
+    report: (span, message) => void this.semantic(span, message),
+  });
+  private readonly classes = this.table.byName;
   private steps = 0;
   private depth = 0;
   private stoppedEarly = false;
@@ -297,166 +308,40 @@ class Interpreter {
   }
 
   private declareClasses(decls: readonly ClassDecl[], env: Environment): void {
-    const entries: ClassEntry[] = [];
-    for (const decl of decls) {
-      if (!env.firstVisit(decl)) continue;
-      const entry: ClassEntry = { kind: "class", name: decl.name, decl, parent: null, fields: [], methods: new Map(), ctors: [], declaredAt: decl.nameSpan, state: "new" };
-      if (!env.declare(entry)) {
-        this.semantic(decl.nameSpan, `'${decl.name}' is already declared in this scope`);
-        continue;
+    // The rules for a class declaration are in classes.ts, shared with the type checker.
+    const added = this.table.declare(decls.filter((decl) => env.firstVisit(decl)));
+    for (const info of added) {
+      const decl = info.decl;
+      this.addSymbolAt(info.name, "class", decl.superName ? `${info.name} extends ${decl.superName}` : info.name, "global", decl.nameSpan);
+      for (const field of info.fields) {
+        if (field.owner === info) this.addSymbolAt(field.name, "field", field.type, `class ${info.name}`, field.decl.nameSpan);
       }
-      this.classes.set(decl.name, entry);
-      this.addSymbolAt(decl.name, "class", decl.superName ? `${decl.name} extends ${decl.superName}` : decl.name, "global", decl.nameSpan);
-      entries.push(entry);
-    }
-    for (const entry of entries) this.completeClass(entry);
-  }
-
-  /** Checks a class against its parent and works out its fields and methods. A class is completed after its parent. */
-  private completeClass(entry: ClassEntry): void {
-    if (entry.state === "done") return;
-    entry.state = "visiting";
-    const decl = entry.decl;
-
-    if (decl.superName !== null) {
-      const parent = this.classes.get(decl.superName);
-      const at = decl.superSpan ?? decl.nameSpan;
-      if (parent === undefined) {
-        const found = this.global.lookup(decl.superName);
-        this.semantic(at, found?.kind === "struct" ? `'${decl.superName}' is a struct; a class can only extend a class` : `unknown class '${decl.superName}'`);
-      } else if (parent.state === "visiting") {
-        this.semantic(at, parent === entry ? `a class cannot extend itself ('${decl.name}')` : `'${decl.name}' extends '${parent.name}', which extends it back: a class cannot be its own ancestor`);
-      } else {
-        this.completeClass(parent);
-        entry.parent = parent;
+      for (const method of info.methods.values()) {
+        this.addSymbolAt(method.name, "method", methodSignature(method.decl), `class ${info.name}`, method.decl.nameSpan);
       }
-    }
-
-    const fields: ClassFieldInfo[] = entry.parent ? [...entry.parent.fields] : [];
-    const own = new Set<string>();
-    for (const member of decl.members) {
-      if (member.kind !== "ClassField") continue;
-      const type = typeNameOf(member.type);
-      if (own.has(member.name)) {
-        this.semantic(member.nameSpan, `class '${decl.name}' already has a field named '${member.name}'`);
-        continue;
-      }
-      own.add(member.name);
-      const inherited = fields.find((f) => f.name === member.name);
-      if (inherited) {
-        this.semantic(member.nameSpan, `'${member.name}' is already a field of '${inherited.owner.name}'; a subclass cannot declare it again`);
-        continue;
-      }
-      if (!this.typeExists(type, this.global)) {
-        this.semantic(member.type.span, `unknown type '${baseTypeOf(type)}'`);
-        continue;
-      }
-      const info: ClassFieldInfo = { name: member.name, type, access: member.access, owner: entry, init: member.init, decl: member };
-      fields.push(info);
-      this.addSymbolAt(member.name, "field", type, `class ${decl.name}`, member.nameSpan);
-    }
-    entry.fields = fields;
-
-    for (const member of decl.members) {
-      if (member.kind === "MethodDecl") {
-        if (entry.methods.has(member.name)) {
-          this.semantic(member.nameSpan, `class '${decl.name}' already has a method named '${member.name}' (two methods cannot share a name, even with different parameters)`);
-          continue;
-        }
-        const method: MethodEntry = { name: member.name, decl: member, owner: entry, access: member.access };
-        entry.methods.set(member.name, method);
-        const inherited = this.findMethod(entry.parent, member.name);
-        if (inherited !== null) this.checkOverride(method, inherited);
-        this.addSymbolAt(member.name, "method", this.signature(member), `class ${decl.name}`, member.nameSpan);
-      } else if (member.kind === "CtorDecl") {
-        if (entry.ctors.some((c) => c.decl.params.length === member.params.length)) {
-          const n = member.params.length;
-          this.semantic(member.nameSpan, `class '${decl.name}' already has a constructor with ${n} parameter${n === 1 ? "" : "s"}`);
-          continue;
-        }
-        entry.ctors.push({ decl: member, owner: entry, access: member.access });
-        this.addSymbolAt(member.name, "method", `${decl.name}(${member.params.map((p) => typeNameOf(p.type)).join(", ")})`, `class ${decl.name}`, member.nameSpan);
-      }
-    }
-    this.checkSuperCalls(entry);
-    entry.state = "done";
-  }
-
-  private signature(decl: MethodDecl): string {
-    return `${typeNameOf(decl.returnType)}(${decl.params.map((p) => typeNameOf(p.type)).join(", ")})`;
-  }
-
-  private checkOverride(method: MethodEntry, inherited: MethodEntry): void {
-    const at = method.decl.nameSpan;
-    if (inherited.access === "private") {
-      this.semantic(at, `'${method.name}' is private in '${inherited.owner.name}' and cannot be overridden`);
-    } else if (this.signature(method.decl) !== this.signature(inherited.decl)) {
-      this.semantic(at, `'${method.name}' in '${method.owner.name}' overrides '${method.name}' of '${inherited.owner.name}', so it must have the same parameters and return type: ${this.signature(inherited.decl)}`);
-    } else if (method.access === "private") {
-      this.semantic(at, `an overriding method cannot be private: '${method.name}' is public in '${inherited.owner.name}'`);
-    }
-  }
-
-  /** Every constructor must say how the parent is built: with super(...), or implicitly with no arguments. */
-  private checkSuperCalls(entry: ClassEntry): void {
-    const parent = entry.parent;
-    const superCallOf = (body: readonly Statement[]): { readonly args: readonly Expression[]; readonly span: Span } | null => {
-      const first = body[0];
-      return first?.kind === "ExprStmt" && first.expression.kind === "SuperCall" ? first.expression : null;
-    };
-    if (parent === null) {
-      if (entry.decl.superName !== null) return; // the parent was wrong and that was reported
-      for (const ctor of entry.ctors) {
-        const call = superCallOf(ctor.decl.body.body);
-        if (call !== null) this.semantic(call.span, `'${entry.name}' has no parent class, so super(...) cannot be used`);
-      }
-      return;
-    }
-    const withoutArguments = parent.ctors.length === 0 || parent.ctors.some((c) => c.decl.params.length === 0);
-    const mustCallSuper = (span: Span): void => {
-      this.semantic(span, `'${entry.name}' must start its constructor with super(...): '${parent.name}' has no constructor without arguments`);
-    };
-    if (entry.ctors.length === 0 && !withoutArguments) mustCallSuper(entry.decl.nameSpan);
-    for (const ctor of entry.ctors) {
-      const call = superCallOf(ctor.decl.body.body);
-      if (call === null) {
-        if (!withoutArguments) mustCallSuper(ctor.decl.nameSpan);
-        continue;
-      }
-      const arities = parent.ctors.length === 0 ? [0] : parent.ctors.map((c) => c.decl.params.length);
-      if (!arities.includes(call.args.length)) {
-        const n = call.args.length;
-        this.semantic(call.span, `'${parent.name}' has no constructor with ${n} argument${n === 1 ? "" : "s"}; it has ${arities.join(" or ")}`);
+      for (const ctor of info.ctors) {
+        this.addSymbolAt(ctor.decl.name, "method", `${info.name}(${ctor.decl.params.map((p) => typeNameOf(p.type)).join(", ")})`, `class ${info.name}`, ctor.decl.nameSpan);
       }
     }
   }
 
-  /** A method of the class or of one of its ancestors, the nearest first. */
-  private findMethod(cls: ClassEntry | null, name: string): MethodEntry | null {
-    for (let current = cls; current !== null; current = current.parent) {
-      const method = current.methods.get(name);
-      if (method !== undefined) return method;
-    }
-    return null;
+  private findMethod(cls: ClassInfo | null, name: string): MethodInfo | null {
+    return this.table.findMethod(cls, name);
   }
 
   /** A `Dog` can go where an `Animal` is expected, and nothing else is added to the rules of types.ts. */
   private assignable(from: string, to: string): boolean {
-    if (isAssignable(from, to)) return true;
-    for (let cls = this.classes.get(from); cls !== undefined && cls !== null; cls = cls.parent ?? undefined) {
-      if (cls.name === to) return true;
-    }
-    return false;
+    return isAssignable(from, to) || this.table.isSubclass(from, to);
   }
 
   /** The class whose method or constructor is running (the class that wrote that code), or null outside a class. */
-  private currentClass(env: Environment): ClassEntry | null {
+  private currentClass(env: Environment): ClassInfo | null {
     const self = env.lookup("this");
     return self?.kind === "variable" ? (this.classes.get(self.type) ?? null) : null;
   }
 
   /** A private member can be used only by the code of the class that declares it. */
-  private canUse(access: "public" | "private", owner: ClassEntry, env: Environment): boolean {
+  private canUse(access: "public" | "private", owner: ClassInfo, env: Environment): boolean {
     return access === "public" || this.currentClass(env) === owner;
   }
 
@@ -1319,7 +1204,7 @@ class Interpreter {
    * Runs a function, a method or a constructor body. `self` is the object of a method call: it becomes `this`,
    * whose type is the class that wrote the method (so what a method may use is decided by where it is written).
    */
-  private invoke(decl: Callable, closure: Environment, label: string, frameName: string, args: Value[], node: Call, self: { readonly object: OakObject; readonly cls: ClassEntry } | null): Value {
+  private invoke(decl: Callable, closure: Environment, label: string, frameName: string, args: Value[], node: Call, self: { readonly object: OakObject; readonly cls: ClassInfo } | null): Value {
     const name = decl.name;
     if (args.length !== decl.params.length) {
       return this.semantic(node.span, `'${name}' expects ${decl.params.length} argument${decl.params.length === 1 ? "" : "s"} but got ${args.length}`);
@@ -1420,7 +1305,7 @@ class Interpreter {
    * Calls `method` (found in the type the variable was declared with) on `receiver`. The version that runs is the
    * one of the object's real class: that is what makes `Animal a = new Dog(); a.speak();` run Dog's method.
    */
-  private callMethod(receiver: OakObject, method: MethodEntry, args: Value[], node: Call, nameSpan: Span, env: Environment): Value {
+  private callMethod(receiver: OakObject, method: MethodInfo, args: Value[], node: Call, nameSpan: Span, env: Environment): Value {
     if (!this.canUse(method.access, method.owner, env)) return this.semantic(nameSpan, `'${method.name}' is private in '${method.owner.name}'`);
     const target = this.findMethod(receiver.cls, method.name) ?? method;
     const label = `${target.owner.name}.${target.name}`;
@@ -1444,9 +1329,9 @@ class Interpreter {
    * Runs the constructor of `cls` on `object`: first the parent's (with super(...) or with no arguments), then the
    * initial values of this class's fields, then the rest of the body. False after reporting a problem.
    */
-  private construct(cls: ClassEntry, object: OakObject, args: Value[], argNodes: readonly Expression[], span: Span, env: Environment): boolean {
+  private construct(cls: ClassInfo, object: OakObject, args: Value[], argNodes: readonly Expression[], span: Span, env: Environment): boolean {
     if (args.some(isError)) return false;
-    let ctor: CtorEntry | null = null;
+    let ctor: CtorInfo | null = null;
     if (cls.ctors.length === 0) {
       if (args.length !== 0) {
         this.semantic(span, `'${cls.name}' has no constructor with arguments, but ${args.length} ${args.length === 1 ? "was" : "were"} given`);

@@ -1,5 +1,5 @@
-import type { ClassEntry } from "./environment";
-import { elementTypeOf, isArrayType } from "./types";
+import type { ClassInfo } from "../classes";
+import { elementTypeOf, isArrayType } from "../types";
 
 /** The result of evaluating an expression: a type and the raw JavaScript value (null means OakLand null). */
 export interface Value {
@@ -39,7 +39,7 @@ export class OakStruct {
 /** An instance of a class. It is a struct whose name is the class it was really created from (never a parent's). */
 export class OakObject extends OakStruct {
   constructor(
-    readonly cls: ClassEntry,
+    readonly cls: ClassInfo,
     fields: readonly StructField[],
     values: Map<string, unknown>,
   ) {
