@@ -1,0 +1,8 @@
+// Field reads and writes on a struct, 300,000 times. Stage 2 replaces this with a method-call loop on a class.
+struct Counter { int total; int steps; }
+Counter c = Counter{total: 0, steps: 0};
+for (int i = 0; i < 300000; i++) {
+    c.total = c.total + i % 3;
+    c.steps++;
+}
+System.out.println(c.total, c.steps);
