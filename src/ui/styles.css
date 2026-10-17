@@ -126,15 +126,36 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
 .where { font-family: var(--mono); color: var(--dim); }
 .note { font-size: 12px; color: var(--dim); margin: 10px 0 0; }
 
-.tree, .tree ul { list-style: none; margin: 0; padding: 0; font: 12px/1.5 var(--mono); }
-.tree ul { padding-left: 16px; border-left: 1px solid var(--rule); margin-left: 5px; }
-.tree-row { display: flex; align-items: baseline; gap: 4px; }
-.tree-toggle { background: none; border: 0; padding: 0 2px; width: 18px; color: var(--dim); font: inherit; }
-.tree-pick { background: none; border: 0; padding: 0 2px; font: inherit; text-align: left; }
-.tree-pick:hover { background: var(--mark-wash); }
-.tree-pick b { font-weight: 600; }
-.tree-pick i { font-style: normal; color: var(--mark); }
-.tree-spacer { display: inline-block; width: 18px; }
+/* ---------- syntax tree ---------- */
+.syntax { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tree-tools { display: flex; align-items: center; gap: 8px; flex: none; padding-bottom: 8px; font-size: 12.5px; }
+.tree-tools button, .tree-detail button { background: none; border: 1px solid var(--edge); padding: 2px 10px; font-weight: 500; }
+.tree-tools button:hover:not(:disabled), .tree-detail button:hover { border-color: var(--ink); }
+.tree-tools .sep { width: 1px; height: 16px; background: var(--edge); margin: 0 4px; }
+.tree-tools .grow { flex: 1; }
+.tree-tools .zoom { min-width: 40px; text-align: center; font-family: var(--mono); color: var(--dim); }
+.tree-scroll { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--rule); }
+.tree-scroll svg { display: block; }
+.tree-edges { fill: none; stroke: var(--edge); stroke-width: 1; }
+.tree-node text { font: 12px var(--mono); fill: var(--ink); pointer-events: none; }
+.tree-node .kind { font-weight: 600; }
+.tree-node .text { fill: var(--mark); }
+.tree-pick rect { fill: var(--paper); stroke: var(--edge); }
+.tree-pick { cursor: pointer; }
+.tree-pick:hover rect { fill: var(--mark-wash); stroke: var(--ink); }
+.tree-node.selected .tree-pick rect { fill: var(--mark-wash); stroke: var(--mark); stroke-width: 2; }
+.tree-pick:focus-visible, .tree-toggle:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+.tree-toggle { cursor: pointer; }
+.tree-toggle rect { fill: var(--paper); stroke: var(--dim); }
+.tree-toggle:hover rect { stroke: var(--ink); }
+.tree-toggle text { text-anchor: middle; font-size: 12px; fill: var(--ink); }
+.tree-detail { flex: none; display: flex; align-items: center; gap: 16px; padding-top: 8px; font: 12.5px var(--mono); min-height: 34px; }
+.tree-detail b { font-weight: 600; }
+.tree-detail .hint { color: var(--dim); }
+
+/* The whole view: the tree takes the place of the code, the side panels and the tape. */
+.fullview { flex: 1; min-height: 0; padding: 12px 24px 16px; }
+.app[data-full] > .sheet, .app[data-full] > .tape, .app[data-full] > .mtabs-nav { display: none; }
 .symbol-pick { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; text-decoration: underline dotted var(--dim); text-underline-offset: 3px; }
 
 /* ---------- editor ---------- */

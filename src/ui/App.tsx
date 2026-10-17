@@ -7,7 +7,8 @@ import type { RunOutcome } from "../worker/protocol";
 import type { EditorHandle, InlineEntry } from "./Editor";
 import { assignedNames } from "./inlineValues";
 import { DEFAULT_LAYOUT, loadLayout, saveLayout, type Layout } from "./layout";
-import { AstTree, count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
+import { count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
+import { SyntaxTree } from "./SyntaxTree";
 import { Splitter } from "./Splitter";
 import { Timeline } from "./Timeline";
 
@@ -65,6 +66,7 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>("out");
+  const [treeFull, setTreeFull] = useState(false);
   const [view, setView] = useState<View>("code");
   const [menu, setMenu] = useState(false);
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -179,6 +181,15 @@ export function App() {
   };
 
   useEffect(() => {
+    if (!treeFull) return;
+    const close = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setTreeFull(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [treeFull]);
+
+  useEffect(() => {
     if (!menu) return;
     const close = (event: Event): void => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
@@ -257,6 +268,7 @@ export function App() {
   // ---------- views ----------
 
   const reveal = useCallback((span: Parameters<EditorHandle["reveal"]>[0]) => {
+    setTreeFull(false);
     setView("code");
     // The code view must be visible before the editor can measure and scroll to the range.
     requestAnimationFrame(() => editor.current?.reveal(span));
@@ -277,7 +289,7 @@ export function App() {
   const valueText = `${readout}${where ? `, ${where}` : ""}`;
 
   return (
-    <div className="app">
+    <div className="app" data-full={treeFull ? "tree" : undefined}>
       <header className="top">
         <h1 className="brand">
           Oak<span>Land</span>
@@ -285,6 +297,9 @@ export function App() {
         <nav className="menu" aria-label="Program" data-menu>
           <button type="button" className="link-button" aria-expanded={menu} aria-controls="examples-menu" onClick={() => setMenu(!menu)}>
             Examples ▾
+          </button>
+          <button type="button" className="link-button" aria-pressed={treeFull} onClick={() => setTreeFull(!treeFull)}>
+            Syntax tree
           </button>
           <span className="file" title={title}>
             {title}
@@ -351,6 +366,12 @@ export function App() {
           ))}
         </div>
       </nav>
+
+      {treeFull ? (
+        <main className="fullview" aria-label="Syntax tree, whole view">
+          <SyntaxTree ast={outcome?.result.ast ?? null} onReveal={reveal} onClose={() => setTreeFull(false)} />
+        </main>
+      ) : null}
 
       <main className="sheet" data-view={view} ref={sheetRef} style={sheetStyle}>
         <Suspense
@@ -438,7 +459,7 @@ export function App() {
               <ProblemsList diagnostics={diagnostics} onPick={reveal} />
             </div>
             <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"} tabIndex={0}>
-              <AstTree ast={result?.ast ?? null} onPick={reveal} />
+              <SyntaxTree ast={result?.ast ?? null} onReveal={reveal} onFull={() => setTreeFull(true)} />
             </div>
             <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"} tabIndex={0}>
               <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} />

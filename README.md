@@ -16,7 +16,7 @@ OakLand began as a university project for the compilers course (OLC2, USAC): an 
 - **See the call stack.** Recursion shows one frame per call, with the variables of each; the line that made a call is marked again when the call returns.
 - **See values next to the code.** Each line that assigns a variable shows its current value at the end of the line.
 - **Read mistakes, not stack traces.** Every problem (syntax, types, names, arguments, bounds, division by zero, runaway loops) is a message with a line and column, underlined in the editor and listed under *Problems*. A bad program never crashes the page.
-- **Look inside.** *Syntax tree* shows how the interpreter parsed the program, *Symbols* lists every name it declares; clicking either jumps to the source.
+- **Look inside.** *Syntax tree* draws how the interpreter parsed the program as a tree (fold any node, zoom, open it as a whole view from the top bar), *Symbols* lists every name it declares; clicking either jumps to the source.
 - **Arrange the panels.** Drag the dividers (or focus one and use the arrow keys) to give the code, the variables or the output more room; the sizes are remembered. The page is dark.
 - **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Structs, Animals, Bank account, Linked list, Heart, Mistakes), open a `.oak` file, or save yours.
 

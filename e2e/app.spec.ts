@@ -210,6 +210,40 @@ test.describe("syntax tree and symbols (AC-29, AC-30)", () => {
     await expect.poll(() => selectedText(page)).toContain("float n = 10;");
   });
 
+  test("the whole view opens from the top bar, selects a node and shows it in the code", async ({ page }) => {
+    await page.getByRole("button", { name: "Syntax tree", exact: true }).click();
+    const whole = page.getByRole("main", { name: "Syntax tree, whole view" });
+    await expect(whole).toBeVisible();
+    await expect(page.locator(".sheet")).toBeHidden();
+    await expect(whole.getByTestId("tree")).toContainText("VarDecl");
+    await whole.locator(".tree-pick", { hasText: "VarDecl" }).first().click();
+    await expect(whole).toContainText(/line \d+:\d+/);
+    await whole.getByRole("button", { name: /Show in code/ }).click();
+    await expect(whole).toBeHidden();
+    await expect.poll(() => selectedText(page)).toContain("float n = 10;");
+  });
+
+  test("folding a node hides what is below it, and Escape closes the whole view", async ({ page }) => {
+    await page.getByRole("button", { name: "Syntax tree", exact: true }).click();
+    const whole = page.getByRole("main", { name: "Syntax tree, whole view" });
+    await whole.getByRole("button", { name: "Expand all" }).click();
+    const before = await whole.locator(".tree-pick").count();
+    await whole.getByRole("button", { name: "Collapse Program" }).click();
+    await expect(whole.locator(".tree-pick")).toHaveCount(1);
+    expect(before).toBeGreaterThan(1);
+    await whole.getByRole("button", { name: "Expand Program" }).click();
+    await expect(whole.locator(".tree-pick")).not.toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(whole).toBeHidden();
+  });
+
+  test("the panel has a button for the whole view", async ({ page }) => {
+    await showPanel(page, "Views");
+    await page.getByRole("tab", { name: "Syntax tree" }).click();
+    await page.getByRole("button", { name: /Full view/ }).click();
+    await expect(page.getByRole("main", { name: "Syntax tree, whole view" })).toBeVisible();
+  });
+
   test("list every declared name and jump to it", async ({ page }) => {
     await showPanel(page, "Views");
     await page.getByRole("tab", { name: "Symbols" }).click();
@@ -369,6 +403,9 @@ test.describe("accessibility (AC-34)", () => {
       await page.getByRole("tab", { name: tab }).click();
       await scan(page);
     }
+    await page.getByRole("tab", { name: "Syntax tree" }).click();
+    await page.getByRole("button", { name: /Full view/ }).click();
+    await scan(page);
   });
 
   test("the examples menu and a program with mistakes have no violations", async ({ page }) => {
