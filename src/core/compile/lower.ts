@@ -1,10 +1,12 @@
 import type { CheckResult } from "../check/check";
+import { superCallOf, type ClassInfo, type MethodInfo } from "../classes";
 import { diagnostic, type Diagnostic } from "../diagnostics";
 import type {
   ArrayLiteral,
   Assign,
   Binary,
   Call,
+  CtorDecl,
   Expression,
   For,
   Foreach,
@@ -13,9 +15,13 @@ import type {
   Initializer,
   LValue,
   Member,
+  MethodDecl,
   NewArray,
+  NewObject,
+  Param,
   Program,
   Statement,
+  StructLiteral,
   Switch,
   Ternary,
   Unary,
@@ -23,7 +29,7 @@ import type {
   VarDecl,
 } from "../parser/ast";
 import type { Span } from "../span";
-import { INT_MAX, INT_MIN } from "../types";
+import { INT_MAX, INT_MIN, typeNameOf } from "../types";
 import { HOST_IMPORTS, type FailSite, type HostName } from "./host";
 import { ARRAY_HEADER, HEAP, MAX_PAGES, MEMORY_RUNTIME_NAMES, memoryRuntime, type MemoryRuntimeName } from "./runtime";
 import { emptyModule, ir, type DataSegment, type Expr, type Func, type Global, type Import, type Local, type Module, type ValType } from "./ir";
@@ -49,7 +55,9 @@ export function lower(program: Program, checked: CheckResult): LowerResult {
 interface Binding {
   readonly wasm: string;
   readonly type: string;
-  readonly kind: "local" | "global";
+  readonly kind: "local" | "global" | "field";
+  /** For a field: where it is inside the object that `this` points to. */
+  readonly offset?: number;
 }
 
 interface LoopLabels {
@@ -59,6 +67,9 @@ interface LoopLabels {
 
 /** Where the first free address is, once the static strings have been placed. Address 0 is `null`. */
 const FIRST_ADDRESS = 8;
+/** An object or a struct is `[vtable base: i32][mark: i32][fields]`. The mark is set while it is being shown, to find cycles. */
+const OBJECT_HEADER = 8;
+const MARK = 4;
 const PAGE = 65536;
 
 const valType = (type: string): ValType => (type === "float" ? "f64" : "i32");
@@ -80,6 +91,22 @@ interface Place {
   write(value: Expr): Expr;
 }
 
+/** Where the fields of a struct or a class are, and how much memory an instance takes. */
+interface Layout {
+  readonly fields: Map<string, { readonly offset: number; readonly type: string }>;
+  readonly order: readonly { readonly name: string; readonly type: string; readonly offset: number }[];
+  readonly size: number;
+}
+
+/** A class: its fields, the names of its virtual methods (slot k + 1 of its vtable), and where the vtable is once one exists. */
+interface ClassLayout extends Layout {
+  readonly slots: readonly string[];
+  vbase: number | null;
+}
+
+const isPrimitive = (type: string): boolean => type === "int" || type === "float" || type === "boolean" || type === "char";
+const paramType = (param: Param): string => typeNameOf(param.type);
+
 /** An `int`, `char` or `boolean`: all are an i32, and `char` and `int` mix in arithmetic. */
 const isWhole = (type: string): boolean => type === "int" || type === "char" || type === "boolean";
 
@@ -92,6 +119,10 @@ class Lowerer {
   private readonly strings = new Map<string, number>();
   private readonly used = new Set<HostName>();
   private readonly runtime = new Map<string, Func>();
+  private readonly structs = new Map<string, Layout>();
+  private readonly classLayouts = new Map<string, ClassLayout>();
+  private readonly table: string[] = [];
+  private readonly building = new Set<string>();
   private dataEnd = FIRST_ADDRESS;
   private counter = 0;
 
@@ -100,6 +131,7 @@ class Lowerer {
   private scopes: Map<string, Binding>[] = [];
   private loops: LoopLabels[] = [];
   private returnType = "void";
+  private owner: ClassInfo | null = null;
   private promoted = new Set<string>();
   private topScope = new Map<string, Binding>();
 
@@ -107,7 +139,11 @@ class Lowerer {
 
   run(program: Program): LowerResult {
     // A top-level variable that a function mentions has to be a global; the others stay locals of main, which is faster.
-    for (const statement of program.body) if (statement.kind === "FuncDecl") collectNames(statement.body, this.promoted);
+    for (const statement of program.body) {
+      if (statement.kind === "FuncDecl") collectNames(statement.body, this.promoted);
+      else if (statement.kind === "ClassDecl") collectNames(statement, this.promoted);
+      else if (statement.kind === "StructDecl") this.structs.set(statement.name, this.layoutOf(statement.fields.map((field) => ({ name: field.name, type: typeNameOf(field.type) }))));
+    }
 
     // The globals exist before any function is lowered: a function may mention one declared further down.
     const topScope = new Map<string, Binding>();
@@ -123,7 +159,7 @@ class Lowerer {
     const topLevel = program.body.filter((s) => s.kind !== "FuncDecl" && s.kind !== "StructDecl");
     for (const statement of program.body) {
       if (statement.kind === "FuncDecl") this.functionDecl(statement);
-      else if (statement.kind === "ClassDecl") this.unsupported(statement.span, "a class");
+      else if (statement.kind === "ClassDecl") this.classDecl(statement);
     }
 
     this.locals = [];
@@ -148,7 +184,7 @@ class Lowerer {
     // The first free address is right after the static data, rounded up to a multiple of 8.
     const heapStart = (this.dataEnd + 7) & ~7;
     const globals = this.globals.map((g) => (g.name === HEAP ? { ...g, init: heapStart } : g));
-    return { ...emptyModule, imports, functions: [...this.functions, ...this.runtime.values()], globals, memory: { min: pages, max: MAX_PAGES }, data: this.data };
+    return { ...emptyModule, imports, functions: [...this.functions, ...this.runtime.values()], globals, memory: { min: pages, max: MAX_PAGES }, data: this.data, table: this.table };
   }
 
   // ---------- small helpers ----------
@@ -226,10 +262,12 @@ class Lowerer {
   }
 
   private read(binding: Binding): Expr {
+    if (binding.kind === "field") return ir.load(loadOf(binding.type), ir.get("this"), binding.offset);
     return binding.kind === "local" ? ir.get(binding.wasm) : ir.getGlobal(binding.wasm);
   }
 
   private write(binding: Binding, value: Expr): Expr {
+    if (binding.kind === "field") return ir.store(storeOf(binding.type), ir.get("this"), value, binding.offset);
     return binding.kind === "local" ? ir.set(binding.wasm, value) : ir.setGlobal(binding.wasm, value);
   }
 
@@ -244,30 +282,34 @@ class Lowerer {
 
   // ---------- functions ----------
 
-  private functionDecl(decl: FuncDecl): void {
-    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType };
+  /** A function, or a method when `owner` is given: then `this` is its first parameter and the fields are in scope. */
+  private functionDecl(decl: FuncDecl | MethodDecl, owner: ClassInfo | null = null): void {
+    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner };
     this.locals = [];
-    this.scopes = [this.topScope, new Map()];
+    this.scopes = owner === null ? [this.topScope, new Map()] : [this.topScope, this.fieldScope(owner), new Map()];
     this.loops = [];
+    this.owner = owner;
     this.returnType = typeNameOfReturn(decl);
+    const own = this.scopes[this.scopes.length - 1];
     const params: Local[] = decl.params.map((param) => {
       const type = param.type.name + "[]".repeat(param.type.dims);
-      this.scopes[1]?.set(param.name, { wasm: param.name, type, kind: "local" });
+      own?.set(param.name, { wasm: param.name, type, kind: "local" });
       return { name: param.name, type: valType(type) };
     });
+    if (owner !== null) params.unshift({ name: "this", type: "i32" });
     // A function sees the top-level variables that were made global; nothing else outside it.
     const body: Expr[] = [];
     for (const statement of decl.body.body) body.push(...this.statement(statement, false));
     // A function that is not void returns on every path (the checker saw to it); this tells the engine the end is not reached.
     if (this.returnType !== "void") body.push(ir.unreachable());
     this.functions.push({
-      name: decl.name,
+      name: owner === null ? decl.name : `${owner.name}.${decl.name}`,
       params,
       results: this.returnType === "void" ? [] : [valType(this.returnType)],
       locals: this.locals,
       body,
     });
-    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType } = saved);
+    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner } = saved);
   }
 
   // ---------- statements ----------
@@ -327,14 +369,17 @@ class Lowerer {
   private varDecl(s: VarDecl, topLevel: boolean): Expr[] {
     const type = s.declaredType === null ? this.typeOf(s.init as Expression) : s.declaredType.name + "[]".repeat(s.declaredType.dims);
     // The initial value is lowered before the name exists, so that `int x = x;` does not see itself.
-    let init = s.init === null ? null : this.initializer(s.init, type);
-    // `int[] b = a;` copies the array (the course's "by copy"); every other way of getting an array shares it.
-    if (init !== null && s.init !== null && s.init.kind === "Identifier" && isArray(type)) {
-      init = ir.call(this.copyFunction(this.typeOf(s.init)), init, ir.i32(this.site(s.span, "out of memory")));
-    }
+    const init = s.init === null ? null : this.initialValue(s.init, type, s.span);
     const binding = this.declare(s.name, type, topLevel);
     // A declaration with no value starts at zero every time it runs, as the interpreter's `null` does for a reference.
     return [this.write(binding, init ?? (valType(type) === "f64" ? ir.f64(0) : ir.i32(0)))];
+  }
+
+  /** The first value of a variable or a field. `int[] b = a;` copies the array (the course's "by copy"); every other way of getting an array shares it. */
+  private initialValue(init: Initializer, type: string, span: Span): Expr {
+    const value = this.initializer(init, type);
+    if (init.kind === "Identifier" && isArray(type)) return ir.call(this.copyFunction(this.typeOf(init)), value, ir.i32(this.site(span, "out of memory")));
+    return value;
   }
 
   private initializer(init: Initializer, type: string): Expr {
@@ -445,7 +490,7 @@ class Lowerer {
           out.push(ir.call(this.host("write_string"), value));
           break;
         default:
-          if (isArray(type)) out.push(ir.call(this.host("write_string"), this.toText(value, type, ir.i32(this.site(arg.span, "out of memory")), arg.span)));
+          if (isArray(type) || this.isRecord(type)) out.push(ir.call(this.host("write_string"), this.toText(value, type, ir.i32(this.site(arg.span, "out of memory")), arg.span)));
           else this.unsupported(arg.span, `printing a ${type}`);
       }
     });
@@ -490,16 +535,18 @@ class Lowerer {
         if (e.name === "length" && isArray(this.typeOf(e.object))) {
           return ir.call(this.runtimeFunction("array_length"), this.expression(e.object), ir.i32(this.site(e.span, "cannot read length of null")));
         }
-        this.unsupported(e.span, "a struct or an object");
-        return this.placeholder(e);
+        return this.fieldRead(e);
       case "NewArray":
         return this.newArray(e);
       case "StructLiteral":
+        return this.structLiteral(e);
       case "NewObject":
+        return this.newObject(e);
       case "This":
+        return ir.get("this");
       case "Super":
       case "SuperCall":
-        this.unsupported(e.span, e.kind === "StructLiteral" ? "a struct or an object" : "an object");
+        this.unsupported(e.span, "super here");
         return this.placeholder(e);
     }
   }
@@ -656,8 +703,20 @@ class Lowerer {
         write: (value) => ir.store(storeOf(elementType), ir.get(slot), value, ARRAY_HEADER),
       };
     }
-    this.unsupported(span, "assigning to a field");
-    return null;
+    const objectType = this.typeOf(target.object);
+    const field = this.fieldOf(objectType, target.name);
+    if (field === null) {
+      this.unsupported(span, "assigning to a field of this kind");
+      return null;
+    }
+    const load = (base: Expr): Expr => ir.load(loadOf(field.type), base, field.offset);
+    const store = (base: Expr, value: Expr): Expr => ir.store(storeOf(field.type), base, value, field.offset);
+    if (target.object.kind === "This") return { type: field.type, setup: [], read: () => load(ir.get("this")), write: (value) => store(ir.get("this"), value) };
+    // The object is worked out and checked once, before the value: a null stops the program before the value is evaluated.
+    const slot = this.fresh("slot");
+    this.locals.push({ name: slot, type: "i32" });
+    const checked = ir.call(this.runtimeFunction("non_null"), this.expression(target.object), ir.i32(this.site(target.span, `cannot use field '${target.name}' of null`)));
+    return { type: field.type, setup: [ir.set(slot, checked)], read: () => load(ir.get(slot)), write: (value) => store(ir.get(slot), value) };
   }
 
   /** Statements that run in order, then a last one; a single block when there is something before it. */
@@ -853,6 +912,8 @@ class Lowerer {
         return ir.if(value, [ir.i32(this.stringLiteral("true"))], [ir.i32(this.stringLiteral("false"))], "i32");
       default:
         if (isArray(type)) return ir.call(this.showFunction(type, true, span), value, site);
+        if (this.checked.classes.get(type) !== undefined) return ir.call(this.showObject(), value, site);
+        if (this.structs.has(type)) return ir.call(this.showRecord(type, this.structs.get(type) as Layout, span), value, site);
         this.unsupported(span, `joining a ${type} to a string`);
         return ir.i32(0);
     }
@@ -863,6 +924,7 @@ class Lowerer {
     const name = `rt:${bracketed ? "show" : "join"}:${mangle(type)}`;
     if (this.runtime.has(name)) return name;
     const elementType = elementOf(type);
+    const marked = bracketed && this.isRefy(elementType);
     const get = ir.get;
     const element = ir.load(loadOf(elementType), ir.op("i32.add", get("a"), ir.op("i32.shl", get("i"), ir.i32(shiftOf(elementType)))), ARRAY_HEADER);
     const text = this.toText(element, elementType, get("site"), span);
@@ -871,10 +933,12 @@ class Lowerer {
       name,
       params: [{ name: "a", type: "i32" }, { name: "site", type: "i32" }],
       results: ["i32"],
-      locals: [{ name: "n", type: "i32" }, { name: "i", type: "i32" }, { name: "strs", type: "i32" }],
+      locals: [{ name: "n", type: "i32" }, { name: "i", type: "i32" }, { name: "strs", type: "i32" }, { name: "r", type: "i32" }],
       body: [
         // Showing null is the text "null"; joining it was checked (and failed) before this was called.
         ir.if(ir.op("i32.eqz", get("a")), [ir.return(ir.i32(this.stringLiteral("null")))]),
+        // An array that can hold objects can hold itself: it is marked while it is shown, and met again it is `[...]`.
+        ...(marked ? [ir.if(ir.load("i32.load", get("a"), MARK), [ir.return(ir.i32(this.stringLiteral("[...]")))]), ir.store("i32.store", get("a"), ir.i32(1), MARK)] : []),
         ir.set("n", ir.load("i32.load", get("a"))),
         ir.set("strs", make),
         ir.set("i", ir.i32(0)),
@@ -886,7 +950,9 @@ class Lowerer {
             ir.br("next"),
           ]),
         ]),
-        ir.call(this.runtimeFunction("join_strings"), get("strs"), ir.i32(bracketed ? 1 : 0), get("site")),
+        ...(marked
+          ? [ir.set("r", ir.call(this.runtimeFunction("join_strings"), get("strs"), ir.i32(1), get("site"))), ir.store("i32.store", get("a"), ir.i32(0), MARK), get("r")]
+          : [ir.call(this.runtimeFunction("join_strings"), get("strs"), ir.i32(bracketed ? 1 : 0), get("site"))]),
       ],
     });
     return name;
@@ -939,19 +1005,296 @@ class Lowerer {
   }
 
   private call(e: Call): Expr {
-    if (e.callee.kind === "Member" && isArray(this.checked.types.get(e.callee.object) ?? "") && (e.callee.name === "join" || e.callee.name === "indexOf")) return this.arrayMethod(e, e.callee);
+    if (e.callee.kind === "Member") {
+      const callee = e.callee;
+      if (callee.object.kind === "Super") return this.superMethod(e, callee);
+      const objectType = this.typeOf(callee.object);
+      const info = this.checked.classes.get(objectType);
+      const method = info === undefined ? null : this.checked.classes.findMethod(info, callee.name);
+      if (info !== undefined && method !== null) return this.invoke(info, method, this.expression(callee.object), e, true, false);
+      if (isArray(objectType) && (callee.name === "join" || callee.name === "indexOf")) return this.arrayMethod(e, callee);
+      this.unsupported(e.span, "a method call");
+      return this.placeholder(e);
+    }
     if (e.callee.kind !== "Identifier") {
       this.unsupported(e.span, "a method call");
       return this.placeholder(e);
     }
     const name = e.callee.name;
+    // Inside a method, `speak()` means `this.speak()`; the methods of the class come before functions.
+    const own = this.owner === null ? null : this.checked.classes.findMethod(this.owner, name);
+    if (this.owner !== null && own !== null) return this.invoke(this.owner, own, ir.get("this"), e, false, false);
     const decl = this.checked.functions.get(name);
     if (decl === undefined) {
       this.unsupported(e.span, `the built-in function ${name}`);
       return this.placeholder(e);
     }
-    const args = e.args.map((arg, i) => this.convert(this.expression(arg), this.typeOf(arg), decl.params[i] ? decl.params[i].type.name + "[]".repeat(decl.params[i].type.dims) : this.typeOf(arg)));
-    return ir.call(name, ...args);
+    return ir.call(name, ...this.convertArgs(decl.params, e.args));
+  }
+
+  /** The arguments of a call, each widened to the type of its parameter. */
+  private convertArgs(params: readonly Param[], args: readonly Expression[]): Expr[] {
+    return args.map((arg, i) => {
+      const param = params[i];
+      return this.convert(this.expression(arg), this.typeOf(arg), param === undefined ? this.typeOf(arg) : paramType(param));
+    });
+  }
+
+  // ---------- structs, classes and objects ----------
+
+  /** Where each field goes: after the header, in order; a float starts on a multiple of 8. */
+  private layoutOf(list: readonly { readonly name: string; readonly type: string }[]): Layout {
+    const fields = new Map<string, { offset: number; type: string }>();
+    const order: { name: string; type: string; offset: number }[] = [];
+    let offset = OBJECT_HEADER;
+    for (const field of list) {
+      if (field.type === "float") offset = (offset + 7) & ~7;
+      fields.set(field.name, { offset, type: field.type });
+      order.push({ name: field.name, type: field.type, offset });
+      offset += field.type === "float" ? 8 : 4;
+    }
+    return { fields, order, size: (offset + 7) & ~7 };
+  }
+
+  private classLayout(name: string): ClassLayout {
+    const known = this.classLayouts.get(name);
+    if (known !== undefined) return known;
+    const info = this.checked.classes.get(name) as ClassInfo;
+    // A subclass's fields and slots start with its parent's, so a variable typed as the parent finds them in the same place.
+    const slots = info.parent === null ? [] : [...this.classLayout(info.parent.name).slots];
+    for (const method of info.methods.keys()) if (!slots.includes(method)) slots.push(method);
+    const layout: ClassLayout = { ...this.layoutOf(info.fields.map((field) => ({ name: field.name, type: field.type }))), slots, vbase: null };
+    this.classLayouts.set(name, layout);
+    return layout;
+  }
+
+  /** The vtable of a class, made the first time an object of it is created: its `show` function, then one entry per slot. */
+  private vtableBase(name: string): number {
+    const layout = this.classLayout(name);
+    if (layout.vbase !== null) return layout.vbase;
+    const info = this.checked.classes.get(name) as ClassInfo;
+    layout.vbase = this.table.length;
+    this.table.push(this.showRecord(name, layout, info.decl.span));
+    for (const slot of layout.slots) {
+      const method = this.checked.classes.findMethod(info, slot) as MethodInfo;
+      this.table.push(`${method.owner.name}.${method.name}`);
+    }
+    return layout.vbase;
+  }
+
+  private fieldOf(type: string, name: string): { readonly offset: number; readonly type: string } | null {
+    if (this.checked.classes.get(type) !== undefined) return this.classLayout(type).fields.get(name) ?? null;
+    return this.structs.get(type)?.fields.get(name) ?? null;
+  }
+
+  private isRecord(type: string): boolean {
+    return this.structs.has(type) || this.checked.classes.get(type) !== undefined;
+  }
+
+  /** Can a value of this type lead back to itself (an object, a struct, or an array of them)? */
+  private isRefy(type: string): boolean {
+    return isArray(type) ? this.isRefy(elementOf(type)) : this.isRecord(type);
+  }
+
+  /** In a method, a bare name that is a field of `this` (and not shadowed by a variable) is read from the object. */
+  private fieldScope(cls: ClassInfo): Map<string, Binding> {
+    const scope = new Map<string, Binding>();
+    for (const [name, slot] of this.classLayout(cls.name).fields) scope.set(name, { wasm: "this", type: slot.type, kind: "field", offset: slot.offset });
+    return scope;
+  }
+
+  private classDecl(decl: Extract<Statement, { kind: "ClassDecl" }>): void {
+    const info = this.checked.classes.get(decl.name);
+    if (info === undefined) return;
+    for (const member of decl.members) if (member.kind === "MethodDecl") this.functionDecl(member, info);
+    for (const member of decl.members) if (member.kind === "CtorDecl") this.constructorFunction(info, member);
+    if (info.ctors.length === 0) this.constructorFunction(info, null);
+  }
+
+  private constructorName(cls: ClassInfo, arity: number): string {
+    return `${cls.name}.new${arity}`;
+  }
+
+  /**
+   * `Class.newN(this, ...)`: first the parent's constructor (with the arguments of `super(...)`, or none), then the initial
+   * values of this class's fields, then the rest of the body. The object already exists, with every field at zero.
+   */
+  private constructorFunction(cls: ClassInfo, ctor: CtorDecl | null): void {
+    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner };
+    this.locals = [];
+    this.loops = [];
+    this.returnType = "void";
+    this.owner = cls;
+    const fields = this.fieldScope(cls);
+    const own = new Map<string, Binding>();
+    this.scopes = [this.topScope, fields, own];
+    const params: Local[] = (ctor?.params ?? []).map((param) => {
+      const type = paramType(param);
+      own.set(param.name, { wasm: param.name, type, kind: "local" });
+      return { name: param.name, type: valType(type) };
+    });
+
+    const body: Expr[] = [];
+    if (cls.parent !== null) {
+      const call = ctor === null ? null : superCallOf(ctor.body.body);
+      const arity = call?.args.length ?? 0;
+      const parentCtor = cls.parent.ctors.find((c) => c.decl.params.length === arity)?.decl ?? null;
+      const args = call === null || parentCtor === null ? [] : this.convertArgs(parentCtor.params, call.args);
+      body.push(ir.call(this.constructorName(cls.parent, arity), ir.get("this"), ...args));
+    }
+    // An initial value sees `this` and the names outside the class, not the parameters of the constructor.
+    this.scopes = [this.topScope, fields];
+    const layout = this.classLayout(cls.name);
+    for (const info of cls.fields) {
+      if (info.owner !== cls || info.init === null) continue;
+      const slot = layout.fields.get(info.name) as { offset: number };
+      body.push(ir.store(storeOf(info.type), ir.get("this"), this.initialValue(info.init, info.type, info.decl.span), slot.offset));
+    }
+    this.scopes = [this.topScope, fields, own];
+    if (ctor !== null) for (const statement of ctor.body.body) body.push(...this.statement(statement, false));
+    this.functions.push({ name: this.constructorName(cls, params.length), params: [{ name: "this", type: "i32" }, ...params], results: [], locals: this.locals, body });
+    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner } = saved);
+  }
+
+  /** `new Dog("Rex", 3)`: memory for the object, its vtable, then its constructor. */
+  private newObject(e: NewObject): Expr {
+    const info = this.checked.classes.get(e.className) as ClassInfo;
+    const layout = this.classLayout(info.name);
+    const ctor = info.ctors.find((c) => c.decl.params.length === e.args.length)?.decl ?? null;
+    const object = this.fresh("object");
+    this.locals.push({ name: object, type: "i32" });
+    const args = ctor === null ? [] : this.convertArgs(ctor.params, e.args);
+    return ir.block(
+      this.fresh("new"),
+      [
+        ir.set(object, ir.call(this.runtimeFunction("alloc"), ir.i32(layout.size), ir.i32(this.site(e.span, "out of memory")))),
+        ir.store("i32.store", ir.get(object), ir.i32(this.vtableBase(info.name))),
+        ir.call(this.constructorName(info, e.args.length), ir.get(object), ...args),
+        ir.get(object),
+      ],
+      "i32",
+    );
+  }
+
+  /** `Person{name: "Ana"}`. A field left out is null, which only a reference can be here; a number cannot (yet). */
+  private structLiteral(e: StructLiteral): Expr {
+    const layout = this.structs.get(e.structName);
+    if (layout === undefined) {
+      this.unsupported(e.span, "a struct");
+      return ir.i32(0);
+    }
+    const given = new Set(e.fields.map((field) => field.name));
+    for (const field of layout.order) {
+      if (!given.has(field.name) && isPrimitive(field.type)) {
+        this.unsupported(e.span, `a struct that leaves out its ${field.type} field '${field.name}' (it would be null)`);
+        return ir.i32(0);
+      }
+    }
+    const struct = this.fresh("struct");
+    this.locals.push({ name: struct, type: "i32" });
+    const body: Expr[] = [ir.set(struct, ir.call(this.runtimeFunction("alloc"), ir.i32(layout.size), ir.i32(this.site(e.span, "out of memory"))))];
+    for (const init of e.fields) {
+      const slot = layout.fields.get(init.name) as { offset: number; type: string };
+      body.push(ir.store(storeOf(slot.type), ir.get(struct), this.convert(this.expression(init.value), this.typeOf(init.value), slot.type), slot.offset));
+    }
+    body.push(ir.get(struct));
+    return ir.block(this.fresh("literal"), body, "i32");
+  }
+
+  private fieldRead(e: Member): Expr {
+    const field = this.fieldOf(this.typeOf(e.object), e.name);
+    if (field === null) {
+      this.unsupported(e.span, "reading a field of this kind");
+      return this.placeholder(e);
+    }
+    const object = e.object.kind === "This" ? ir.get("this") : ir.call(this.runtimeFunction("non_null"), this.expression(e.object), ir.i32(this.site(e.span, `cannot read field '${e.name}' of null`)));
+    return ir.load(loadOf(field.type), object, field.offset);
+  }
+
+  /** Is the method redefined by some class below `cls`? If not, a call to it never needs the vtable. */
+  private isOverridden(cls: ClassInfo, name: string): boolean {
+    for (const other of this.checked.classes.byName.values()) {
+      if (other !== cls && other.methods.has(name) && this.checked.classes.isSubclass(other.name, cls.name)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * A call to a method. With a receiver that could be null, the receiver and the arguments are worked out first and
+   * only then is the receiver checked, as the interpreter does. A method nobody overrides is called directly; any
+   * other goes through the vtable of the object's real class.
+   */
+  private invoke(cls: ClassInfo, method: MethodInfo, receiver: Expr, e: Call, checkNull: boolean, direct: boolean): Expr {
+    const params = method.decl.params;
+    const before: Expr[] = [];
+    let self = receiver;
+    let args = this.convertArgs(params, e.args);
+    if (checkNull) {
+      self = this.spill(receiver, cls.name, before, true);
+      args = args.map((arg, i) => this.spill(arg, paramType(params[i] as Param), before, true));
+    }
+    const target = checkNull ? ir.call(this.runtimeFunction("non_null"), self, ir.i32(this.site(e.span, `cannot call ${method.name} on null`))) : self;
+    const returns = typeNameOf(method.decl.returnType);
+    let call: Expr;
+    if (!direct && this.isOverridden(cls, method.name)) {
+      const slot = this.classLayout(cls.name).slots.indexOf(method.name) + 1;
+      const signature = { params: ["i32" as ValType, ...params.map((param) => valType(paramType(param)))], results: returns === "void" ? [] : [valType(returns)] };
+      call = ir.callIndirect(signature, ir.op("i32.add", ir.load("i32.load", self), ir.i32(slot)), target, ...args);
+    } else {
+      call = ir.call(`${method.owner.name}.${method.name}`, target, ...args);
+    }
+    return this.sequence(before, call, returns === "void" ? null : valType(returns));
+  }
+
+  private superMethod(e: Call, callee: Member): Expr {
+    const parent = this.owner?.parent ?? null;
+    const method = parent === null ? null : this.checked.classes.findMethod(parent, callee.name);
+    if (parent === null || method === null) {
+      this.unsupported(e.span, "super here");
+      return this.placeholder(e);
+    }
+    return this.invoke(parent, method, ir.get("this"), e, false, true);
+  }
+
+  /** `rt:showobj`: an object of any class as text, by asking its own class (slot 0 of its vtable). */
+  private showObject(): string {
+    const name = "rt:showobj";
+    if (this.runtime.has(name)) return name;
+    this.runtime.set(name, {
+      name,
+      params: [{ name: "a", type: "i32" }, { name: "site", type: "i32" }],
+      results: ["i32"],
+      locals: [],
+      body: [
+        ir.if(ir.op("i32.eqz", ir.get("a")), [ir.return(ir.i32(this.stringLiteral("null")))]),
+        ir.callIndirect({ params: ["i32", "i32"], results: ["i32"] }, ir.load("i32.load", ir.get("a")), ir.get("a"), ir.get("site")),
+      ],
+    });
+    return name;
+  }
+
+  /** `rt:show:Name`: a struct or an object as `Name{field: value, ...}`. A value met again while it is being shown is `Name{...}`. */
+  private showRecord(name: string, layout: Layout, span: Span): string {
+    const full = `rt:show:${name}`;
+    if (this.runtime.has(full) || this.building.has(full)) return full;
+    this.building.add(full);
+    const get = ir.get;
+    const literal = (text: string): Expr => ir.i32(this.stringLiteral(text));
+    const join = (a: Expr, b: Expr): Expr => ir.call(this.runtimeFunction("str_concat"), a, b, get("site"));
+    const body: Expr[] = [
+      ir.if(ir.op("i32.eqz", get("a")), [ir.return(literal("null"))]),
+      ir.if(ir.load("i32.load", get("a"), MARK), [ir.return(literal(`${name}{...}`))]),
+      ir.store("i32.store", get("a"), ir.i32(1), MARK),
+      ir.set("s", literal(`${name}{`)),
+    ];
+    layout.order.forEach((field, k) => {
+      body.push(ir.set("s", join(get("s"), literal(`${k > 0 ? ", " : ""}${field.name}: `))));
+      body.push(ir.set("s", join(get("s"), this.toText(ir.load(loadOf(field.type), get("a"), field.offset), field.type, get("site"), span))));
+    });
+    body.push(ir.set("s", join(get("s"), literal("}"))), ir.store("i32.store", get("a"), ir.i32(0), MARK), get("s"));
+    this.runtime.set(full, { name: full, params: [{ name: "a", type: "i32" }, { name: "site", type: "i32" }], results: ["i32"], locals: [{ name: "s", type: "i32" }], body });
+    this.building.delete(full);
+    return full;
   }
 
   // ---------- the runtime: small functions the module carries with it ----------
@@ -1004,7 +1347,7 @@ class Lowerer {
 const MEMORY_RUNTIME = new Set<string>(MEMORY_RUNTIME_NAMES);
 const isMemoryRuntime = (name: string): name is MemoryRuntimeName => MEMORY_RUNTIME.has(name);
 
-function typeNameOfReturn(decl: FuncDecl): string {
+function typeNameOfReturn(decl: FuncDecl | MethodDecl): string {
   return decl.returnType.name + "[]".repeat(decl.returnType.dims);
 }
 

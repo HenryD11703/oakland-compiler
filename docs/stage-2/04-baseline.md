@@ -7,9 +7,9 @@ Measured with `npm run bench` on **Node v22.23.3, Intel Core i3-9100F @ 3.60 GHz
 | `loop` | 1,000,000 iterations of integer arithmetic | 2,101 | 1,989 | 16,000,010 |
 | `fib` | recursive Fibonacci, `fib(25)`, about 250,000 calls | 294 | 247 | 2,549,243 |
 | `sieve` | sieve of Eratosthenes to 200,000 (arrays, nested loops) | 1,068 | 1,015 | 9,048,987 |
-| `fields` | 300,000 field reads and writes on a struct | 515 | 484 | 5,100,016 |
+| `fields` | 300,000 method calls on a class, each reading and writing two fields | 875 | 790 | 5,400,014 |
 
-The fourth program is a struct loop because classes do not exist yet; T48 replaces it with a method-call loop on a class.
+The fourth program was a struct loop (515 ms with trace, 484 ms without, 5,100,016 steps) until T48, when classes became compilable; it is now a method-call loop on a class, measured on 2026-10-17.
 
 ## What this answers
 
