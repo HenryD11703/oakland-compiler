@@ -30,13 +30,14 @@ export function expectSame(source: string, expected?: string): void {
 }
 
 /** For a program that fails at run time: both report the same first mistake at the same place, and the compiled one stops there. */
-export function expectSameFailure(source: string, message: string): void {
+export function expectSameFailure(source: string, message: string, phase: "runtime" | "semantic" = "runtime"): void {
   const { compiled, ran, interpreted } = both(source);
   expect(compiled.diagnostics.map((d) => d.message), "the program did not compile").toEqual([]);
-  const first = interpreted.diagnostics.find((d) => d.phase === "runtime");
+  const first = interpreted.diagnostics.find((d) => d.phase === phase);
   expect(first?.message, "the interpreter's first runtime mistake").toBe(message);
   expect(ran?.diagnostics).toHaveLength(1);
   expect(ran?.diagnostics[0]?.message).toBe(message);
+  expect(ran?.diagnostics[0]?.phase).toBe(phase);
   expect(ran?.diagnostics[0]?.span, "the place of the mistake").toEqual(first?.span);
   expect(ran?.stoppedEarly).toBe(true);
   // The interpreter goes on after a mistake and the compiled program does not: what the compiled one printed is where they agree.

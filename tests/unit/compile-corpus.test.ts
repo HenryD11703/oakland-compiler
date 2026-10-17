@@ -14,6 +14,8 @@ describe("the whole corpus, compiled and interpreted", () => {
 
   it.each(compiled.map((p) => [p.name, p] as const))("%s prints the same text in both modes", (_name, program) => {
     // The interpreter goes first: a program that never ends is stopped by its step limit, and a compiled run has none here.
+    // A program that prints the time of day cannot print the same text twice; it is compiled, but not compared.
+    if (/\btime\(\)/.test(program.source)) return;
     const interpreted = run(program.source, { trace: false, limits: { maxSteps: 50_000_000, maxTimeMs: 20_000 } });
     if (interpreted.stoppedEarly) return;
     const ran = runCompiled(program.result);
@@ -22,7 +24,7 @@ describe("the whole corpus, compiled and interpreted", () => {
   });
 
   it("the compiler accepts at least as many corpus programs as it did at the last milestone", () => {
-    // T48: numbers, control flow, functions, strings, arrays, structs and classes. Raise this number when a task makes more programs compile.
-    expect(compiled.length).toBeGreaterThanOrEqual(42);
+    // T49: numbers, control flow, functions, strings, arrays, structs, classes and the built-in functions. Raise this number when a task makes more programs compile.
+    expect(compiled.length).toBeGreaterThanOrEqual(44);
   });
 });
