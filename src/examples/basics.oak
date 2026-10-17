@@ -10,9 +10,8 @@ var inferred = 42;          // the type comes from the value
 System.out.println(count, ratio, label, grade, ready, inferred);
 System.out.println(typeof count, typeof ratio, typeof label, typeof grade, typeof ready);
 
-// A variable declared without a value holds null until you assign one.
+// A variable can be declared first and given its value later.
 int later;
-System.out.println("later is", later);
 later = 7;
 System.out.println("later is now", later);
 
