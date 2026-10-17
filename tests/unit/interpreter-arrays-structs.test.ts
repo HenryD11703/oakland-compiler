@@ -123,9 +123,9 @@ describe("structs (AC-18)", () => {
     ).toBe("Ana 20 Rex Person\nPerson{name: Ana, age: 24, pet: Pet{name: Max}}");
   });
 
-  it("leaves the fields that were not given as null", () => {
-    expect(out(PERSON + 'Person p = Person{name: "Ana"}; System.out.println(p.age, p.pet, p.pet == null);')).toBe("null null true");
-    expect(out(PERSON + "Person p = Person{}; System.out.println(p);")).toBe("Person{name: null, age: null, pet: null}");
+  it("starts the fields that were not given at the default of their type", () => {
+    expect(out(PERSON + 'Person p = Person{name: "Ana"}; System.out.println(p.age, p.pet, p.pet == null);')).toBe("0 null true");
+    expect(out(PERSON + "Person p = Person{}; System.out.println(p);")).toBe("Person{name: null, age: 0, pet: null}");
   });
 
   it("can be declared after its use", () => {

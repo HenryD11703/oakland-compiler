@@ -7,6 +7,7 @@ describe("structs, classes and objects, compiled and interpreted (S-01 to S-06, 
     ["a struct: literal, fields, assignment, printing", `struct Pet { string name; } struct Person { string name; int age; Pet pet; } Person ana = Person{name: "Ana", age: 20, pet: Pet{name: "Rex"}}; ana.age++; ana.pet.name = "Max"; ana.age += 5; System.out.println(ana.name, ana.age, ana.pet.name); System.out.println(ana); System.out.println("p=" + ana.pet);`],
     ["a struct is shared when it is passed", `struct P { int n; } void bump(P p) { p.n++; } P a = P{n: 1}; P b = a; bump(a); b.n += 10; System.out.println(a.n, b.n, a == b, a == P{n: 12});`],
     ["a struct with every kind of field", `struct S { int i; float f; boolean b; char c; string s; int[] a; } S s = S{i: 1, f: 2, b: true, c: 'x', s: "t", a: new int[2]}; System.out.println(s); s.f += 0.5; s.c = 'y'; s.a[0] = 9; System.out.println(s.f, s.c, s.a);`],
+    ["a struct that leaves out a number starts it at zero", `struct P { string name; int age; float h; boolean ok; char c; } P p = P{name: "Luis"}; p.age++; System.out.println(p, p.h, p.ok);`],
     ["a struct that leaves out a reference field", `struct N { int v; N next; string tag; } N n = N{v: 3}; System.out.println(n.next == null, n.tag, n);`],
     ["a struct inside an array and an array inside a struct", `struct P { int x; } P[] ps = {P{x: 1}, P{x: 2}}; ps[1].x = 20; System.out.println(ps, ps[0].x + ps[1].x); P[] q = new P[2]; System.out.println(q);`],
     ["a class with fields, a constructor and methods", `class Counter { int n; Counter(int start) { n = start; } void inc() { n++; } int get() { return n; } } Counter c = new Counter(5); c.inc(); c.inc(); System.out.println(c.get(), c.n);`],
@@ -60,12 +61,6 @@ describe("structs, classes and objects, compiled and interpreted (S-01 to S-06, 
 
   it.each(failures)("%s", (_name, source, message) => {
     expectSameFailure(source, message);
-  });
-
-  it("a struct that leaves out a number is not compiled yet, and says where", () => {
-    const result = compile(`struct P { string name; int age; } P p = P{name: "Luis"};`);
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics[0]?.message).toContain("cannot be compiled yet");
   });
 
   it("shows the class table in the WebAssembly text", () => {

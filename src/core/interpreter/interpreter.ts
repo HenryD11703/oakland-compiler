@@ -1151,7 +1151,7 @@ class Interpreter {
   private evalStructLiteral(node: StructLiteral, env: Environment): Value {
     const entry = env.lookup(node.structName);
     if (entry?.kind !== "struct") return this.semantic(node.span, `unknown struct '${node.structName}'`);
-    const values = new Map<string, unknown>(entry.fields.map((f) => [f.name, null]));
+    const values = new Map<string, unknown>(entry.fields.map((f) => [f.name, fieldDefault(f.type)]));
     const given = new Set<string>();
     for (const init of node.fields) {
       const field = entry.fields.find((f) => f.name === init.name);

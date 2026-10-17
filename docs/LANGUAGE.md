@@ -469,7 +469,7 @@ null
 
 ## Structs
 
-A struct groups named, typed fields. It can be used before the line that declares it. Create a value with `Name{field: value, ...}`; fields that are left out are `null`. Read and write a field with a dot.
+A struct groups named, typed fields. It can be used before the line that declares it. Create a value with `Name{field: value, ...}`; a field that is left out starts at the default of its type (`0`, `0.0`, `false`, `'\0'`, or `null` for text, arrays, structs and objects), as the fields of a class do. Read and write a field with a dot.
 
 ```oak
 struct Pet { string name; }
@@ -487,7 +487,7 @@ System.out.println(q.age, q.pet);
 ```output
 Ana 22 Max Person
 Person{name: Ana, age: 22, pet: Pet{name: Max}}
-null null
+0 null
 ```
 
 A struct value is shared, like an array, when it is passed to a function or assigned. An unknown field, or a value of the wrong type, is reported.

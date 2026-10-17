@@ -104,7 +104,6 @@ interface ClassLayout extends Layout {
   vbase: number | null;
 }
 
-const isPrimitive = (type: string): boolean => type === "int" || type === "float" || type === "boolean" || type === "char";
 const paramType = (param: Param): string => typeNameOf(param.type);
 
 /** An `int`, `char` or `boolean`: all are an i32, and `char` and `int` mix in arithmetic. */
@@ -1176,19 +1175,12 @@ class Lowerer {
     );
   }
 
-  /** `Person{name: "Ana"}`. A field left out is null, which only a reference can be here; a number cannot (yet). */
+  /** `Person{name: "Ana"}`. A field left out stays at zero, which is the default of every type. */
   private structLiteral(e: StructLiteral): Expr {
     const layout = this.structs.get(e.structName);
     if (layout === undefined) {
       this.unsupported(e.span, "a struct");
       return ir.i32(0);
-    }
-    const given = new Set(e.fields.map((field) => field.name));
-    for (const field of layout.order) {
-      if (!given.has(field.name) && isPrimitive(field.type)) {
-        this.unsupported(e.span, `a struct that leaves out its ${field.type} field '${field.name}' (it would be null)`);
-        return ir.i32(0);
-      }
     }
     const struct = this.fresh("struct");
     this.locals.push({ name: struct, type: "i32" });

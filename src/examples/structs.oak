@@ -17,7 +17,7 @@ ana.age++;
 ana.pet.name = "Max";
 System.out.println(ana);
 
-// Fields you leave out are null.
+// Fields you leave out start at their default: 0 for numbers, null for the rest.
 Person luis = Person{name: "Luis"};
 System.out.println(luis.name, luis.age, luis.pet);
 

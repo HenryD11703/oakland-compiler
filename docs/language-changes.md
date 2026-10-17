@@ -15,6 +15,7 @@ Everything here is a difference between OakLand as the original interpreter (com
 | **Relaxed:** `int[] a = {};` (empty list) is allowed. | Same. |
 | **Relaxed:** `;` after the closing `}` of a `struct` is optional. | The original required it. |
 | **Relaxed:** struct names, parameters, return types and arrays can use a struct type (`Person[] ps`, `Person make()`). | Needed for structs to be usable. |
+| **Changed:** a struct field left out of `Name{...}` starts at the default of its type (`0`, `false`, `null`…), like a class field, instead of always `null`. | Approved by Henry (2026-10-17); a compiled number cannot be null. |
 | **Stricter:** a string literal must end on the same line it starts. | In the original an unterminated `"` swallowed the rest of the file and hid the real error. |
 | **Stricter:** a struct body holds only fields (`int age;`). | The original accepted any statement inside it. |
 | **Removed:** `[expr]` as a grouping alternative to `(expr)`, and `name : value` as a free-standing expression. | Accidents of the original grammar (the second only exists now inside `Person{name: value}`). No sample uses them. |
