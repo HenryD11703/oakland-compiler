@@ -20,15 +20,27 @@ function requireString(context: BuiltinContext, name: string, arg: Value): strin
   return null;
 }
 
+/** Text to an int, the one rule both the interpreter and the compiled program use. */
+export function parseIntegerText(source: string): { readonly ok: true; readonly value: number } | { readonly ok: false; readonly reason: "text" | "range" } {
+  if (!/^\s*[+-]?\d+(\.\d+)?\s*$/.test(source)) return { ok: false, reason: "text" };
+  const number = Math.trunc(Number(source));
+  if (number < INT_MIN || number > INT_MAX) return { ok: false, reason: "range" };
+  return { ok: true, value: number };
+}
+
+/** Text to a float; null when it is not a number. */
+export function parseDecimalText(source: string): number | null {
+  return /^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/.test(source) ? Number(source) : null;
+}
+
 const parseInteger: Builtin = {
   params: 1,
   call(context, [arg], name) {
     const source = requireString(context, name, arg as Value);
     if (source === null) return ERROR;
-    if (!/^\s*[+-]?\d+(\.\d+)?\s*$/.test(source)) return context.fail(`${name} cannot convert "${source}" to an int`);
-    const number = Math.trunc(Number(source));
-    if (number < INT_MIN || number > INT_MAX) return context.fail(`${name}: "${source}" does not fit in an int`);
-    return { type: "int", value: number };
+    const parsed = parseIntegerText(source);
+    if (!parsed.ok) return context.fail(parsed.reason === "text" ? `${name} cannot convert "${source}" to an int` : `${name}: "${source}" does not fit in an int`);
+    return { type: "int", value: parsed.value };
   },
 };
 
@@ -37,8 +49,9 @@ const parseDecimal: Builtin = {
   call(context, [arg], name) {
     const source = requireString(context, name, arg as Value);
     if (source === null) return ERROR;
-    if (!/^\s*[+-]?(\d+(\.\d*)?|\.\d+)\s*$/.test(source)) return context.fail(`${name} cannot convert "${source}" to a float`);
-    return { type: "float", value: Number(source) };
+    const number = parseDecimalText(source);
+    if (number === null) return context.fail(`${name} cannot convert "${source}" to a float`);
+    return { type: "float", value: number };
   },
 };
 

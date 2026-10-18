@@ -197,8 +197,8 @@ class Lowerer {
     return `env:${name}`;
   }
 
-  private site(span: Span, message: string): number {
-    this.sites.push({ span, message });
+  private site(span: Span, message: string, phase?: "semantic"): number {
+    this.sites.push(phase === undefined ? { span, message } : { span, message, phase });
     return this.sites.length - 1;
   }
 
@@ -1024,11 +1024,46 @@ class Lowerer {
     const own = this.owner === null ? null : this.checked.classes.findMethod(this.owner, name);
     if (this.owner !== null && own !== null) return this.invoke(this.owner, own, ir.get("this"), e, false, false);
     const decl = this.checked.functions.get(name);
-    if (decl === undefined) {
-      this.unsupported(e.span, `the built-in function ${name}`);
-      return this.placeholder(e);
-    }
+    if (decl === undefined) return this.builtin(e, name);
     return ir.call(name, ...this.convertArgs(decl.params, e.args));
+  }
+
+  /** The functions every program can call (`parseInt`, `toUpperCase`…): same names, same mistakes as the interpreter's. */
+  private builtin(e: Call, name: string): Expr {
+    const arg = e.args[0];
+    const argType = arg === undefined ? "void" : this.typeOf(arg);
+    const nullText = (): Expr => ir.call(this.runtimeFunction("non_null"), this.expression(arg as Expression), ir.i32(this.site(e.span, `${name} expects a string, but got ${argType}`, "semantic")));
+    const memory = (): Expr => ir.i32(this.site(e.span, "out of memory"));
+    switch (name) {
+      case "parseInt":
+      case "parseFloat":
+      case "parsefloat": {
+        // A run of places that can fail: null text, text that is not a number, and for an int, one that does not fit.
+        const first = this.site(e.span, `${name} expects a string, but got ${argType}`, "semantic");
+        const isInt = name === "parseInt";
+        this.site(e.span, `${name} cannot convert "{s}" to ${isInt ? "an int" : "a float"}`, "semantic");
+        if (isInt) this.site(e.span, `${name}: "{s}" does not fit in an int`, "semantic");
+        return ir.call(this.host(isInt ? "parse_int" : "parse_float"), this.expression(arg as Expression), ir.i32(first));
+      }
+      case "toLowerCase":
+        return ir.call(this.runtimeFunction("lower_str"), nullText(), memory());
+      case "toUpperCase":
+        return ir.call(this.runtimeFunction("upper_str"), nullText(), memory());
+      case "time":
+        return ir.call(this.runtimeFunction("time_str"), memory());
+      case "obtenerLongitudArray":
+        return ir.load("i32.load", ir.call(this.runtimeFunction("non_null"), this.expression(arg as Expression), ir.i32(this.site(e.span, `${name} received null instead of an array`, "semantic"))));
+      case "toString": {
+        const value = this.expression(arg as Expression);
+        if (argType !== "string") return this.toText(value, argType, memory(), e.span);
+        // A null string becomes the text "null", as the interpreter shows it.
+        const kept = this.fresh("text");
+        this.locals.push({ name: kept, type: "i32" });
+        return ir.block(this.fresh("text"), [ir.set(kept, value), ir.if(ir.get(kept), [ir.get(kept)], [ir.i32(this.stringLiteral("null"))], "i32")], "i32");
+      }
+    }
+    this.unsupported(e.span, `the built-in function ${name}`);
+    return this.placeholder(e);
   }
 
   /** The arguments of a call, each widened to the type of its parameter. */

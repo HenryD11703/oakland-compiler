@@ -10,6 +10,9 @@ export const MEMORY_RUNTIME_NAMES = [
   "int_to_str",
   "char_to_str",
   "float_to_str",
+  "lower_str",
+  "upper_str",
+  "time_str",
   "str_concat",
   "str_eq",
   "str_cmp",
@@ -157,6 +160,27 @@ export function memoryRuntime(name: MemoryRuntimeName, needs: RuntimeNeeds): Fun
           get("p"),
         ],
       };
+
+    // The text built-ins: the host works the text out, the program makes the string and the host fills it.
+    case "lower_str":
+    case "upper_str":
+    case "time_str": {
+      const hostName = name === "lower_str" ? "text_lower" : name === "upper_str" ? "text_upper" : "text_time";
+      const given = name === "time_str" ? [] : [get("s")];
+      return {
+        name: full,
+        params: [...(name === "time_str" ? [] : [local("s")]), local("site")],
+        results: ["i32"],
+        locals: [local("n"), local("p")],
+        body: [
+          ir.set("n", ir.call(needs.host(hostName), ...given)),
+          ir.set("p", ir.call(alloc(), stringBytes(get("n")), get("site"))),
+          ir.store("i32.store", get("p"), get("n")),
+          ir.call(needs.host("take_text"), op("i32.add", get("p"), i32(4))),
+          get("p"),
+        ],
+      };
+    }
 
     // Joining two strings; a null on either side reads as the text "null", like in Java.
     case "str_concat": {
