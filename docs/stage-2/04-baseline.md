@@ -21,6 +21,10 @@ The fourth program was a struct loop (515 ms with trace, 484 ms without, 5,100,0
 
 The first version of the benchmark ran the TypeScript through `tsx` and reported 4.5 s for the loop. A CPU profile showed 48 % of the time in `__name` and `TextDecoder`, helpers that esbuild's `keepNames` adds to every closure the interpreter creates. Built the way the site is built, the same loop takes 2.0 s. The script now builds the core with `vite build --ssr` before measuring. The earlier "4.8 s" in the notes of 2026-10-15 was this artefact, not the interpreter.
 
-## Not measured yet
+## Final numbers (T54)
 
-Browser timings (the Worker on a desktop and on a phone). T54 measures them and labels them.
+The table with the compiled mode, in Node and in Chromium, is in the README ("How fast"), made by `npm run bench` and `npm run bench:browser` on 2026-10-18. The first table above is the interpreter-only baseline from before the compiler existed.
+
+## Not measured
+
+A phone. The Worker inside the real page (the browser table times the engine in an empty page). Anything but this one machine.

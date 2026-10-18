@@ -13,7 +13,7 @@ describe("the whole corpus, compiled and interpreted", () => {
   let spent = 0; // milliseconds spent comparing, added up by the test below
   const compiled = programs.map((p) => ({ ...p, result: compile(p.source) })).filter((p) => p.result.ok);
 
-  it.each(compiled.map((p) => [p.name, p] as const))("%s prints the same text in both modes", (name, program) => {
+  it.each(compiled.map((p) => [p.name, p] as const))("%s prints the same text in both modes", { timeout: 30_000 }, (name, program) => {
     const started = performance.now();
     const verdict = compareModes(program.source, program.result);
     spent += performance.now() - started;

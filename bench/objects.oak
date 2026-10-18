@@ -1,0 +1,21 @@
+// Objects: 300,000 virtual calls through the type of the parent.
+class Shape {
+    int sides() { return 0; }
+    int area(int k) { return k; }
+}
+class Square extends Shape {
+    int sides() { return 4; }
+    int area(int k) { return k * k; }
+}
+class Triangle extends Shape {
+    int sides() { return 3; }
+    int area(int k) { return k * (k + 1) / 2; }
+}
+Shape[] shapes = {new Shape(), new Square(), new Triangle(), new Square()};
+int total = 0;
+for (int round = 0; round < 75000; round++) {
+    for (Shape s : shapes) {
+        total += s.area(round % 10) + s.sides();
+    }
+}
+System.out.println(total);

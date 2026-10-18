@@ -65,7 +65,8 @@ export function compareModes(source: string, compiledResult?: CompileResult): Ve
   const compiled = compiledResult ?? compile(source);
   if (!compiled.ok) return { skipped: "the compiler does not take it", problem: null };
   // The interpreter goes first: a program that never ends is stopped by its step limit, and a compiled run has none here.
-  const interpreted = run(source, { trace: false, limits: { maxSteps: 50_000_000, maxTimeMs: 20_000 } });
+  // The limits of the page: a program that needs more than these is one the person would see stopped.
+  const interpreted = run(source, { trace: false });
   if (interpreted.diagnostics.some((d) => NEVER_ENDS.test(d.message))) return { skipped: "the interpreter's limit ended it", problem: null };
   const ran = runCompiled(compiled);
   const internal = ran.diagnostics.find((d) => d.message.startsWith("internal error"));

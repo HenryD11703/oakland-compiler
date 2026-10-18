@@ -16,7 +16,8 @@
     "check": "npm run lint && npm run typecheck && npm test",
     "capture-legacy": "node scripts/capture-legacy.mjs",
     "screenshots": "node scripts/readme-screenshots.mjs",
-    "bench": "tsx scripts/bench.ts"
+    "bench": "tsx scripts/bench.ts",
+    "bench:browser": "tsx scripts/bench-browser.ts"
   },
   "engines": {
     "node": ">=20.19.0"

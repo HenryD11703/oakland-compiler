@@ -43,6 +43,42 @@ System.out.println(ana.name, "is", ana.age, "and 5! is", factorial(5));
 
 The full reference is [`docs/LANGUAGE.md`](docs/LANGUAGE.md). **Every example in it is run by the test suite**, so it cannot drift from the interpreter. The grammar is [`docs/grammar.ebnf`](docs/grammar.ebnf), and what changed from the original course interpreter, line by line, is [`docs/language-changes.md`](docs/language-changes.md).
 
+## How fast
+
+The page runs programs with the interpreter. Underneath it there is also a **compiler to WebAssembly** (`src/core/compile/`): the same programs, checked by the same type checker, turned into a module the browser runs natively. The page does not offer it yet; these are the numbers of the engine, measured with `npm run bench` (Node) and `npm run bench:browser` (Chromium). Both check that the two modes print the same text before they time anything.
+
+**Node 22.23.3** on an Intel Core i3-9100F @ 3.60 GHz (4 threads, 8 GiB), WSL2 on Windows, 2026-10-18. Median of 5 runs after a warm-up, times in milliseconds.
+
+| Program | Original | Interpreter, with trace | Interpreter, no trace | Compiled | Faster | Compile | Module (bytes) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| fib: recursive `fib(25)`, 250,000 calls | 1,685 | 345 | 304 | 0.9 | 337× | 1.0 | 296 |
+| loop: a million iterations of integer arithmetic | 393 | 2,444 | 2,118 | 5.9 | 358× | 1.0 | 198 |
+| sieve: primes up to 200,000 | n/a | 1,253 | 1,270 | 4.2 | 302× | 1.1 | 586 |
+| matrix: two 80 × 80 matrices multiplied | 1,438 | 1,553 | 1,518 | 6.8 | 223× | 2.0 | 1,175 |
+| fields: 300,000 method calls on a class | n/a | 992 | 879 | 3.9 | 226× | 2.1 | 1,062 |
+| objects: 300,000 virtual calls | n/a | 1,356 | 1,248 | 7.5 | 166× | 2.5 | 1,672 |
+| strings: 100,000 short strings and one long one | n/a | 307 | 274 | 15.6 | 18× | 1.4 | 1,025 |
+
+**Chromium 156** (headless, through Playwright) on the same machine, same method:
+
+| Program | Interpreter, no trace | Compiled | Faster | Compile | Module (bytes) |
+|---|---:|---:|---:|---:|---:|
+| fib | 241 | 0.9 | 268× | 0.9 | 296 |
+| loop | 1,738 | 5.1 | 341× | 1.0 | 198 |
+| sieve | 862 | 4.3 | 200× | 1.4 | 586 |
+| matrix | 1,067 | 7.5 | 142× | 1.9 | 1,175 |
+| fields | 599 | 1.4 | 428× | 1.9 | 1,062 |
+| objects | 836 | 2.4 | 348× | 1.8 | 1,672 |
+| strings | 200 | 12.2 | 16× | 3.7 | 1,025 |
+
+How to read them honestly:
+
+- **"Faster" is against this rebuilt interpreter, which does a lot of work the compiled code does not**: it checks types, counts steps against limits, keeps scopes with positions and records a trace so the page can replay a run. The **original** course interpreter, which did none of that, was faster than the rebuilt one on simple loops (393 ms against 2,118 ms on `loop`) and slower on recursion (1,685 ms against 304 ms on `fib`). It could not run the programs marked n/a (older syntax, no arrays of that kind, no classes).
+- The speed-up is smallest where the work is in strings (16–18×): building a string copies it, and turning a float into text is done by the browser, not by the module.
+- Compiling takes 1 to 4 ms for these programs, and the modules are 0.2 to 1.7 KB.
+- One machine, one run of the script, a desktop CPU. Nothing here was measured on a phone. A compiled run has no step counter, so a program that never ends is stopped from outside (the Worker), not by a limit.
+- Memory in a compiled run is a bump allocator that never frees: a program that keeps allocating ends with `out of memory` at 256 MiB, which the interpreter does not.
+
 ## Run it yourself
 
 ```bash
@@ -51,6 +87,8 @@ npm run dev        # http://localhost:5173
 npm run check      # lint + types + unit tests
 npm run test:e2e   # builds, serves and tests the page in Chromium (desktop and phone, with axe)
 npm run build
+npm run bench          # interpreter and compiler on the programs in bench/ (Node)
+npm run bench:browser  # the same inside Chromium (needs: npx playwright install chromium)
 ```
 
 Node 20.19 or newer. Nothing else: no backend, no Docker, no environment variables.

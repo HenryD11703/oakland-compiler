@@ -1,0 +1,13 @@
+// Strings: 100,000 short strings built and compared, and one long one grown piece by piece.
+int same = 0;
+for (int i = 0; i < 100000; i++) {
+    string t = "o" + (i % 3);
+    if (t == "o1") {
+        same++;
+    }
+}
+string text = "";
+for (int i = 0; i < 4000; i++) {
+    text += i % 10;
+}
+System.out.println(same, text == toUpperCase(text), toUpperCase("done"));

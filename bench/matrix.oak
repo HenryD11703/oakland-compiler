@@ -1,0 +1,21 @@
+// Matrices: two 80 x 80 matrices multiplied, half a million multiply-and-add steps.
+int n = 80;
+int[][] a = new int[n][n];
+int[][] b = new int[n][n];
+int[][] c = new int[n][n];
+for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+        a[i][j] = i + j;
+        b[i][j] = i - j;
+    }
+}
+for (int i = 0; i < n; i++) {
+    for (int j = 0; j < n; j++) {
+        int sum = 0;
+        for (int k = 0; k < n; k++) {
+            sum += a[i][k] * b[k][j];
+        }
+        c[i][j] = sum;
+    }
+}
+System.out.println(c[0][0], c[40][40], c[79][79]);
