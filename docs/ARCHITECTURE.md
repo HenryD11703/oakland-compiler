@@ -36,6 +36,28 @@ src/ui/       React + CodeMirror 6; reads the result, never touches the interpre
 | Vite + React, plain CSS, fonts bundled | one client-side page; works offline once loaded; nothing leaves the browser | Next.js, Tailwind, Google Fonts |
 | Vercel, from `main` | Henry's other projects are there; no workflow to maintain; the base path is `/` | GitHub Pages (needs a workflow and a path-prefixed base; it was the first plan) |
 
+## Stage 2: a checker and a compiler
+
+Added after the rebuild; the decisions and what was rejected are D13 to D22 in [`stage-2/02-plan.md`](stage-2/02-plan.md), and [`COMPILER.md`](COMPILER.md) explains the compiler from a line of source to its bytes. In short:
+
+```
+   ▼  src/core/check        the type of every expression, without running anything (D13)
+   ▼  src/core/compile      the checked tree → one IR → bytes and text (D15); a runtime written in that IR (D16)
+   ▼  src/worker            compile, run and compare are three requests to the same kind of worker (D22)
+```
+
+| Decision | What stood | What changed while building |
+|---|---|---|
+| A separate checker, used by Compile mode; Interpret stays tolerant (D13) | Both modes exist side by side; the interpreter checks the checker (a program the checker accepts never gets a type mistake when interpreted) | — |
+| WebAssembly with linear memory, `i32` and `f64` only (D14) | No GC, no `i64` | — |
+| One IR, two writers (D15) | The page shows the tree the bytes are made from | The "source position on every instruction" became a **table of sites** returned with the module (D18) |
+| Memory model (D16) | Address 0 is null; a bump allocator; a runtime in the IR | An object is `[vtable base][mark][fields]`, not `[class id][fields]` (a virtual call is one load and one `call_indirect`, and the mark finds cycles when printing); an array has an 8-byte header so a `float` stays aligned |
+| Few host imports (D17) | Floats are formatted by the same JavaScript routine as the one the interpreter uses | The list grew to what the built-in functions need (`text_lower`, `parse_int`, …) |
+| Runtime errors end the run, with positions from a table (D18) | Same words and place as the interpreter | The depth of calls is counted like the interpreter does (400); the built-in functions keep the `semantic` phase the interpreter gives them |
+| Differential tests as the oracle (D19, D20) | The interpreter is the oracle for the compiler | A generator of programs, eight deliberately broken compilers that it must catch, a minimiser; golden WebAssembly for six programs |
+| The compiled view is a panel, not a new screen (D22) | Three mockups first; Henry chose B (source beside its WebAssembly) with the log-scale chart of C | The output and problems fold into one line under the WebAssembly; the numbers of the module replace the timeline |
+| Functions inside functions | Not in the plan | Compiled with **frames** (a record in memory per function that has variables an inner function uses), so no closure ever escapes: functions are not values |
+
 ## The trace
 
 One **step** is recorded for each statement that runs, each condition that is evaluated (with its result), each for-each iteration, and each return to the line that made a call. A step holds the events it caused: a variable declared or changed, an array element or struct field changed, a frame or scope opened or closed. Arrays and structs live on a **heap** of their own, referred to by id, so two variables holding the same array show the same contents.
@@ -62,4 +84,4 @@ Scope and frame changes take effect at the *start of the next step*, so the vari
 
 ## What is not here
 
-Live (breakpoint-style) debugging, a static type checker, sharing programs by link, a dark theme, localisation. See `01-spec.md`, "Out".
+Live (breakpoint-style) debugging, sharing programs by link, localisation, a garbage collector for compiled programs, optimisation of the compiled code. See `01-spec.md`, "Out".

@@ -97,26 +97,28 @@ Node 20.19 or newer. Nothing else: no backend, no Docker, no environment variabl
 ## How it is built
 
 ```
-src/core/       the interpreter: lexer, parser, tree-walking interpreter, trace, symbols. No DOM.
-src/worker/     runs a program in a Web Worker; Stop ends the worker
+src/core/       the interpreter (lexer, parser, tree-walking interpreter, trace, symbols), the static type
+                checker (check/) and the compiler to WebAssembly (compile/). No DOM.
+src/worker/     runs a program in a Web Worker (interpret, compile or compare); Stop ends the worker
 src/ui/         React interface, CodeMirror 6 editor, timeline
 src/examples/   the twelve example programs (English)
 docs/           principles, spec, plan, tasks, language reference, design notes
 tests/ e2e/     unit, golden, fuzz and documentation tests; Playwright end-to-end tests
 ```
 
-The design decisions, and the alternatives that were rejected, are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). The project was written spec-first: [principles](docs/00-principles.md), [spec](docs/01-spec.md) with 39 measurable acceptance criteria, [plan](docs/02-plan.md) and [tasks](docs/03-tasks.md), which ends in a table mapping each criterion to the test that checks it.
+The design decisions, and the alternatives that were rejected, are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the compiler, from a line of source to its bytes, is in [`docs/COMPILER.md`](docs/COMPILER.md). The project was written spec-first: [principles](docs/00-principles.md), [spec](docs/01-spec.md) with 39 measurable acceptance criteria, [plan](docs/02-plan.md) and [tasks](docs/03-tasks.md), which ends in a table mapping each criterion to the test that checks it.
 
 ## Testing
 
-- **About 870 unit tests**: lexer, parser (with a corpus of syntax errors and their exact positions), every operator and statement, structs, classes (objects, inheritance, virtual calls, private, 50 class mistakes), built-ins, limits, the trace and its replay, the symbol table, the timeline data.
+- **About 1,600 unit tests** (the number is whatever `npm run check` prints): lexer, parser (with a corpus of syntax errors and their exact positions), every operator and statement, structs, classes (objects, inheritance, virtual calls, private, 50 class mistakes), built-ins, limits, the trace and its replay, the symbol table, the timeline data.
 - **Golden files** pin the output of the seven original course programs, and the way it differs from the original interpreter's (`tests/golden/legacy-diff/`). The course's own hand-written expected outputs are checked too.
-- **Fuzzing**: 1,000 mutations of the samples and 500 token soups, seeded, must never make `run()` throw. (A one-off 20,000-case run found no exception.)
-- **48 end-to-end tests** (24 on a desktop and 24 on a phone viewport) with axe accessibility scans of every panel: Stop on a runaway loop, jumping from a problem to its line, stepping by keyboard, opening and saving files.
+- **Fuzzing**: 1,000 mutations of the samples and 500 token soups, seeded, must never make `run()` or `compile()` throw, and every module the compiler returns must validate. (One-off runs of 20,000 cases found no exception.)
+- **Two modes, one answer**: every program of the corpus, and 200 generated well-typed programs, are run interpreted and compiled and must print the same text and meet the same first mistake. Eight deliberately broken compilers (one instruction swapped for another) must each be caught by those same programs. Six small programs have their WebAssembly committed as golden files, and the worked example of `docs/COMPILER.md` is compiled by a test.
+- **About 80 end-to-end tests** (on a desktop and on a phone viewport) with axe accessibility scans of every panel: Stop on a runaway loop, jumping from a problem to its line, stepping by keyboard, opening and saving files, and Compile mode (pick Sieve, Compile, read the WebAssembly, Compare; a compiled infinite loop ended by Stop and by the five-second limit).
 
 ## Honest limits
 
-- **Recursion is limited to 400 nested calls** (Java allows thousands). The interpreter uses the JavaScript stack, which gives out first; a recursive sum up to 1000 does not fit.
+- **Recursion is limited to 400 nested calls** (Java allows thousands), in both modes and with the same message. The interpreter uses the JavaScript stack, which gives out first; a recursive sum up to 1000 does not fit.
 - A run is bounded: 20 million steps, 5 seconds, 200,000 characters of output, 1,000,000 elements per array. Past that it stops with a diagnostic and keeps its output.
 - The trace records up to 20,000 steps; longer runs complete but the timeline says it was cut.
 - Lighthouse on a simulated slow phone: Performance 82–100 across runs (median 83); Accessibility, Best Practices and SEO 100. Desktop preset: 93.

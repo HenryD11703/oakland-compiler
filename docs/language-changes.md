@@ -84,3 +84,19 @@ Added after the rebuild (see `docs/stage-2/`). The seven original programs, the 
 | **No overloading:** two methods of one class cannot share a name, even with different parameters, and constructors are told apart by their number of arguments only. A subclass cannot declare a field its parent already has. | Keeps the rules small and the compiled code simple (stage 2 plan, S-01 and S-05). |
 | **`a ? b : c` has one type, whichever side is chosen:** the two sides must have the same type, or be numbers (then it is `float` if either is, else `int`; a `char` next to an `int` is an `int`), or be `null` and a reference type, or a class and its parent. `true ? 1 : 2.5` is now the float `1.0` (it was the int `1`), and `true ? 'a' : 1` is the int `97`. Two sides of unrelated types are a mistake in the checker. | Spec S-14: a compiler cannot know which side will run, so the type cannot depend on it. |
 | **`super(...)` anywhere but first in a constructor is reported before the program runs,** like a misplaced `break`. | `placement.ts`. |
+
+## Stage 2: the compiler
+
+Compile mode runs a program as WebAssembly. For every program the checker accepts and that ends without a mistake, it prints **exactly** what the interpreter prints (a test checks the whole corpus and 200 generated programs). These are the places where the two modes differ on purpose:
+
+| Difference | Why |
+|---|---|
+| **A runtime mistake ends a compiled run.** The interpreter reports it and goes on, with a "poison" value that keeps one mistake from causing a dozen. | Poison in every value would cost the speed that is the point of compiling. The first mistake has the same words and place in both modes (a test checks it). |
+| **A program with a type mistake is not compiled.** The interpreter runs it, because the sample programs mix wrong statements with right ones. | A compiler needs the type of every expression. |
+| **There is no timeline in Compile mode,** and no variables panel. | No steps are recorded. |
+| **`out of memory` at 256 MiB** only exists compiled; a compiled program never frees memory. | The allocator is a bump pointer. |
+| **A program that never ends** is ended by Stop or after five seconds compiled; the interpreter has a step limit (20 million) and a time limit (5 s). | A compiled program has no step counter. |
+| **`time()`** prints the time of day in both modes, so two runs of one program never print the same text. | — |
+| **Fields of a struct left out of `Name{...}`** start at the default of their type in both modes (a number is 0, not `null`). | A compiled number cannot be null. Approved 2026-10-17. |
+
+What is the same on purpose: the limit of 400 nested calls and its message, the million-element limit of an array, the 200,000 characters of output, and the `semantic` phase of the mistakes of the built-in functions.

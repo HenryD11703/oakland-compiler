@@ -46,15 +46,45 @@
 - ✅ **T58 E2E and accessibility.** Playwright at 1280 and 375 px with axe on the new panels. *Done when:* CI is green. Covers: S-27.
 
 ## Phase F — Closing (2 sessions)
-- **T59 Documentation.** `COMPILER.md` with the worked example, `ARCHITECTURE.md`, `LANGUAGE.md`, `language-changes.md`, the repository `README.md` and `CLAUDE.md` for stage 2. *Done when:* a person who has never seen the project can follow `COMPILER.md` from a source line to its bytes. Covers: S-29, S-31.
-- **T60 Verify and publish.** Everything in `npm run check`, `npm run build`, `npm audit --omit=dev`, E2E; the table "criterion → test" below is complete. Publishing, a tag and the deployment need Henry's OK. Covers: S-30.
+- ✅ **T59 Documentation.** `COMPILER.md` with the worked example, `ARCHITECTURE.md`, `LANGUAGE.md`, `language-changes.md`, the repository `README.md` and `CLAUDE.md` for stage 2. *Done when:* a person who has never seen the project can follow `COMPILER.md` from a source line to its bytes. Covers: S-29, S-31.
+- 🟡 **T60 Verify and publish.** (verified on 2026-10-17: `npm run check` 1,606 tests, `npm run build`, `npm audit --omit=dev` 0 vulnerabilities, 86 E2E passed; publishing waits for Henry) Everything in `npm run check`, `npm run build`, `npm audit --omit=dev`, E2E; the table "criterion → test" below is complete. Publishing, a tag and the deployment need Henry's OK. Covers: S-30.
 
 ## If it is too much
 Cut from the end of the list, never from the middle: first the stretch items, then Compare (T57 part), then foldable functions and the jump to source, then Phase E's browser benchmark, then arrays of classes in compiled code. What must stay for the stage to be worth showing: T43 to T51 for numbers, strings, arrays and classes, the differential suite of Phase D, and a Compile button with the WAT visible.
 
 ## Table: criterion → test
-Filled in as tasks close.
+Every criterion of `01-spec.md` and the test that checks it. A path under `tests/unit` is a Vitest file; `e2e/` is Playwright.
 
 | Criterion | Checked by |
 |---|---|
-| S-01 … S-31 | *(pending)* |
+| S-01 constructors, `new` | `parser-classes`, `interpreter-classes`, `compile-classes` ("constructors are told apart by their number of arguments", "constructors run parent first…") |
+| S-02 `this`, bare field names | `interpreter-classes`, `compile-classes` ("a name inside a method is a variable, then a field") |
+| S-03 methods and fields, `++`, `+=` | `interpreter-classes`, `check-classes`, `compile-classes` ("fields: ++, --, +=, -=…") |
+| S-04 inheritance, `super` | `interpreter-classes`, `check-classes`, `compile-classes` (three-level hierarchy, `super.m()`) |
+| S-05 overriding, virtual dispatch | `interpreter-classes`, `compile-classes` ("virtual calls: the object decides"), `compile-generated` (classes with overrides) |
+| S-06 a subclass where its parent is expected | `check-classes`, `interpreter-classes`, `compile-classes` |
+| S-07 `private` | `check-classes`, `interpreter-classes`, the class-mistake catalogue (`tests/helpers/class-mistakes.ts`, run by `compile-corpus` and `check-agreement`) |
+| S-08 `null` field or method | `interpreter-classes`, `compile-classes` and `compile-errors` (the same message and place in both modes) |
+| S-09 every class mistake is a diagnostic | `check-classes`, `interpreter-classes`, the class-mistake catalogue |
+| S-10 objects in the interface | `trace-classes`, `symbols-ast`, `ui-data`, `e2e/app.spec.ts` |
+| S-11 structs unchanged | `interpreter-arrays-structs`, `legacy-golden`, `golden`, `compile-classes` (structs) |
+| S-12 `check()` | `check-expressions`, `check-statements`, `check-classes`, `check-agreement` |
+| S-13 definite assignment | `check-statements`, `interpreter-statements` |
+| S-14 type of `a ? b : c` | `check-expressions`, `interpreter-expressions` |
+| S-15 a clean program has no type mistake when interpreted | `check-agreement` |
+| S-16 `compile()`: never throws, valid modules | `compile-fuzz` (1,000 mutations, 500 soups, huge inputs), `compile-encode`, `compile-wat` |
+| S-17 equivalence of the two modes | `compile-corpus` (the whole corpus), `compile-generated` (200 seeds and eight broken compilers), `compile-numbers`, `compile-strings`, `compile-arrays`, `compile-classes`, `compile-builtins`, `compile-nested`, `compile-fuzz` |
+| S-18 compiled runtime mistakes end the run, same words and place | `compile-errors`, `compile-arrays`, `compile-classes`, `compile-builtins`, `compile-nested`, `compareModes` in the corpus |
+| S-19 `int`, `float`, `char`, strings | `compile-numbers`, `compile-strings`, `compile-generated` |
+| S-20 limits | `compile-errors` (depth 400, a million elements), `compile-arrays` (`out of memory`), `worker-client`, `e2e/compile.spec.ts` (Stop and the five-second limit on a compiled infinite loop) |
+| S-21 no compiler dependencies | `package.json` has none; `compile-encode` assembles a module by hand; `WebAssembly.validate` referees (`compile-fuzz`) |
+| S-22 measured numbers | `npm run bench` and `npm run bench:browser` (both refuse to time a program whose two modes print different text); the README, "How fast" |
+| S-23 mode switch, keyboard | `e2e/compile.spec.ts` ("the same flow from the keyboard") |
+| S-24 the Compiled panel | `e2e/compile.spec.ts` (fold, jump to source, a line opens its function), `worker-client` (functions and their source lines) |
+| S-25 Compare | `e2e/compile.spec.ts`, `worker-client` ("compares the two modes", "says why two runs cannot be compared") |
+| S-26 worker, Stop, hard timeout | `worker-client`, `e2e/compile.spec.ts` |
+| S-27 axe, 1280 and 375 px, keyboard, dark theme | `e2e/compile.spec.ts` ("accessibility of the new panels"), `e2e/app.spec.ts` |
+| S-28 three mockups before the interface | `docs/design/compiler/` (three directions with real data; Henry chose B with the chart of C on 2026-10-17) |
+| S-29 documentation | `tests/docs/language-doc.test.ts` (every example of `LANGUAGE.md` runs), `tests/docs/compiler-doc.test.ts` (the worked example of `COMPILER.md` is compiled and must match), `ARCHITECTURE.md`, `language-changes.md` |
+| S-30 CI stays green | `.github/workflows/ci.yml` (check, build, audit, E2E) |
+| S-31 everything is in English | reviewed by hand; the tests, the interface and the documents of the repository are English (the Spanish names `obtenerLongitudArray` and the samples are the language's own) |
