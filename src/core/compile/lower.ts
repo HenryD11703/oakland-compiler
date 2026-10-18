@@ -56,9 +56,39 @@ export function lower(program: Program, checked: CheckResult): LowerResult {
 interface Binding {
   readonly wasm: string;
   readonly type: string;
-  readonly kind: "local" | "global" | "field";
-  /** For a field: where it is inside the object that `this` points to. */
+  readonly kind: "local" | "global" | "field" | "frame" | "function";
+  /** For a field: where it is inside the object that `this` points to. For a variable in a frame: where it is in the frame. */
   readonly offset?: number;
+  /** For a variable in a frame: the function that declared it. */
+  readonly owner?: FnInfo;
+  /** For a function declared inside another: what is needed to call it. */
+  readonly target?: FuncBinding;
+}
+
+/**
+ * One function being lowered. A variable that a function declared inside it mentions (a name that appears in the inner
+ * body, which is a safe over-estimate) cannot stay in a local of WebAssembly: it lives in a *frame*, a small record in
+ * memory made when the function starts, and the inner function is given a pointer to it. A frame's first word points to
+ * the frame of the function around it, so that a function can reach the variables of every function that encloses it.
+ */
+interface FnInfo {
+  readonly parent: FnInfo | null;
+  /** True for a function declared inside another: it takes the enclosing frame as its parameter `$up`. */
+  readonly nested: boolean;
+  /** The names that need a place in a frame. */
+  readonly boxed: ReadonlySet<string>;
+  /** Does this function make a frame? (It declares at least one variable that an inner function mentions.) */
+  readonly hasFrame: boolean;
+  slots: number;
+  /** What runs after the frame is made: the parameters that live in it are copied there. */
+  readonly prologue: Expr[];
+}
+
+/** A function declared inside another: the name of its WebAssembly function and the function it sits in. */
+interface FuncBinding {
+  readonly wasm: string;
+  readonly decl: FuncDecl;
+  readonly parent: FnInfo;
 }
 
 interface LoopLabels {
@@ -109,8 +139,6 @@ interface ClassLayout extends Layout {
 
 const paramType = (param: Param): string => typeNameOf(param.type);
 
-/** An `int`, `char` or `boolean`: all are an i32, and `char` and `int` mix in arithmetic. */
-const isWhole = (type: string): boolean => type === "int" || type === "char" || type === "boolean";
 
 class Lowerer {
   private readonly diagnostics: Diagnostic[] = [];
@@ -135,6 +163,7 @@ class Lowerer {
   private loops: LoopLabels[] = [];
   private returnType = "void";
   private owner: ClassInfo | null = null;
+  private fn: FnInfo = { parent: null, nested: false, boxed: new Set(), hasFrame: false, slots: 0, prologue: [] };
   private promoted = new Set<string>();
   private topScope = new Map<string, Binding>();
 
@@ -169,9 +198,12 @@ class Lowerer {
     this.scopes = [topScope];
     this.loops = [];
     this.returnType = "void";
+    this.owner = null;
+    this.fn = this.makeFn(null, false, [], topLevel);
+    this.registerFunctions(topLevel);
     const body: Expr[] = [];
     for (const statement of topLevel) body.push(...this.statement(statement, true));
-    this.functions.unshift({ name: "main", export: "main", params: [], results: [], locals: this.locals, body });
+    this.functions.unshift({ name: "main", export: "main", params: [], results: [], locals: this.locals, body: this.withFrame(body, program.span) });
 
     return { module: this.build(), sites: this.sites, diagnostics: this.diagnostics };
   }
@@ -260,6 +292,8 @@ class Lowerer {
     const existing = topLevel && this.scopes.length === 1 ? this.topScope.get(name) : undefined;
     if (existing !== undefined) {
       binding = existing; // a top-level variable a function uses: its global was made before the functions were lowered
+    } else if (this.fn.boxed.has(name)) {
+      binding = { wasm: "", type, kind: "frame", offset: 8 + 8 * this.fn.slots++, owner: this.fn };
     } else {
       const wasm = `${name}.${++this.counter}`;
       this.locals.push({ name: wasm, type: valType(type) });
@@ -271,11 +305,13 @@ class Lowerer {
 
   private read(binding: Binding): Expr {
     if (binding.kind === "field") return ir.load(loadOf(binding.type), ir.get("this"), binding.offset);
+    if (binding.kind === "frame") return ir.load(loadOf(binding.type), this.envOf(binding.owner as FnInfo), binding.offset);
     return binding.kind === "local" ? ir.get(binding.wasm) : ir.getGlobal(binding.wasm);
   }
 
   private write(binding: Binding, value: Expr): Expr {
     if (binding.kind === "field") return ir.store(storeOf(binding.type), ir.get("this"), value, binding.offset);
+    if (binding.kind === "frame") return ir.store(storeOf(binding.type), this.envOf(binding.owner as FnInfo), value, binding.offset);
     return binding.kind === "local" ? ir.set(binding.wasm, value) : ir.setGlobal(binding.wasm, value);
   }
 
@@ -292,32 +328,103 @@ class Lowerer {
 
   /** A function, or a method when `owner` is given: then `this` is its first parameter and the fields are in scope. */
   private functionDecl(decl: FuncDecl | MethodDecl, owner: ClassInfo | null = null): void {
-    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner };
+    this.lowerFunction(decl, owner === null ? decl.name : `${owner.name}.${decl.name}`, owner, null);
+  }
+
+  /**
+   * Lowers one function: a top-level one, a method, or (with `inside`) one declared inside another, which also takes the
+   * frame of the function around it. A function sees the top-level variables that were made global and, inside another
+   * function, the variables declared before it in the functions around it; nothing else outside it.
+   */
+  private lowerFunction(decl: FuncDecl | MethodDecl, wasmName: string, owner: ClassInfo | null, inside: FnInfo | null): void {
+    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner, fn: this.fn };
     this.locals = [];
-    this.scopes = owner === null ? [this.topScope, new Map()] : [this.topScope, this.fieldScope(owner), new Map()];
+    this.scopes = inside !== null ? [...saved.scopes, new Map()] : owner === null ? [this.topScope, new Map()] : [this.topScope, this.fieldScope(owner), new Map()];
     this.loops = [];
     this.owner = owner;
+    this.fn = this.makeFn(inside, inside !== null, decl.params, decl.body.body);
     this.returnType = typeNameOfReturn(decl);
-    const own = this.scopes[this.scopes.length - 1];
-    const params: Local[] = decl.params.map((param) => {
-      const type = param.type.name + "[]".repeat(param.type.dims);
-      own?.set(param.name, { wasm: param.name, type, kind: "local" });
-      return { name: param.name, type: valType(type) };
-    });
+    const own = this.scopes[this.scopes.length - 1] as Map<string, Binding>;
+    const params: Local[] = decl.params.map((param) => this.bindParameter(own, param));
+    if (inside !== null) params.unshift({ name: "$up", type: "i32" });
     if (owner !== null) params.unshift({ name: "this", type: "i32" });
-    // A function sees the top-level variables that were made global; nothing else outside it.
+    this.registerFunctions(decl.body.body);
     const body: Expr[] = [];
     for (const statement of decl.body.body) body.push(...this.statement(statement, false));
     // A function that is not void returns on every path (the checker saw to it); this tells the engine the end is not reached.
     if (this.returnType !== "void") body.push(ir.unreachable());
     this.functions.push({
-      name: owner === null ? decl.name : `${owner.name}.${decl.name}`,
+      name: wasmName,
       params,
       results: this.returnType === "void" ? [] : [valType(this.returnType)],
       locals: this.locals,
-      body,
+      body: this.withFrame(body, decl.span),
     });
-    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner } = saved);
+    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner, fn: this.fn } = saved);
+  }
+
+  /** What is known about a function before its body is lowered: which of its variables live in a frame. */
+  private makeFn(parent: FnInfo | null, nested: boolean, params: readonly Param[], body: readonly Statement[]): FnInfo {
+    const boxed = new Set<string>();
+    for (const inner of nestedFunctions(body)) collectNames(inner, boxed);
+    const hasFrame = [...params.map((p) => p.name), ...declaredNames(body)].some((name) => boxed.has(name));
+    return { parent, nested, boxed, hasFrame, slots: 0, prologue: [] };
+  }
+
+  /** A parameter is a local of the function, unless an inner function mentions it: then it is copied into the frame. */
+  private bindParameter(scope: Map<string, Binding>, param: Param): Local {
+    const type = paramType(param);
+    if (this.fn.boxed.has(param.name)) {
+      const offset = 8 + 8 * this.fn.slots++;
+      scope.set(param.name, { wasm: "", type, kind: "frame", offset, owner: this.fn });
+      this.fn.prologue.push(ir.store(storeOf(type), ir.get("$frame"), ir.get(param.name), offset));
+    } else {
+      scope.set(param.name, { wasm: param.name, type, kind: "local" });
+    }
+    return { name: param.name, type: valType(type) };
+  }
+
+  /** The body of the function being lowered, with the making of its frame in front when it has one. */
+  private withFrame(body: Expr[], span: Span): Expr[] {
+    if (!this.fn.hasFrame) return body;
+    this.locals.push({ name: "$frame", type: "i32" });
+    const make = ir.call(this.runtimeFunction("alloc"), ir.i32(8 + 8 * this.fn.slots), ir.i32(this.site(span, "out of memory")));
+    return [ir.set("$frame", make), ir.store("i32.store", ir.get("$frame"), this.fn.nested ? ir.get("$up") : ir.i32(0)), ...this.fn.prologue, ...body];
+  }
+
+  /** The frame (or the nearest one above) that belongs to `target`, as seen from the function being lowered. */
+  private envOf(target: FnInfo): Expr {
+    const current = this.fn;
+    if (current === target) return target.hasFrame ? ir.get("$frame") : target.nested ? ir.get("$up") : ir.i32(0);
+    let pointer: Expr = ir.get("$up");
+    for (let f = current.parent; f !== null && f !== target; f = f.parent) if (f.hasFrame) pointer = ir.load("i32.load", pointer);
+    return pointer;
+  }
+
+  /** The functions declared directly in a list of statements can be called from anywhere in it, before their line too. */
+  private registerFunctions(statements: readonly Statement[]): void {
+    const scope = this.scopes[this.scopes.length - 1] as Map<string, Binding>;
+    for (const statement of statements) {
+      if (statement.kind !== "FuncDecl" || scope.has(`fn ${statement.name}`)) continue;
+      scope.set(`fn ${statement.name}`, { wasm: "", type: "", kind: "function", target: { wasm: `${statement.name}.${++this.counter}`, decl: statement, parent: this.fn } });
+    }
+  }
+
+  private lookupFunction(name: string): FuncBinding | null {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const found = this.scopes[i]?.get(`fn ${name}`);
+      if (found?.target !== undefined) return found.target;
+    }
+    return null;
+  }
+
+  /** A call to a function declared inside another: the frame it needs goes with the arguments. */
+  private callNested(e: Call, target: FuncBinding): Expr {
+    const decl = target.decl;
+    const hidden: Expr[] = [...(this.owner === null ? [] : [ir.get("this")]), this.envOf(target.parent)];
+    const types: ValType[] = [...hidden.map(() => "i32" as ValType), ...decl.params.map((param) => valType(paramType(param)))];
+    const returns = typeNameOfReturn(decl);
+    return this.guarded(ir.call(target.wasm, ...hidden, ...this.convertArgs(decl.params, e.args)), types, returns === "void" ? null : valType(returns), e.span);
   }
 
   // ---------- statements ----------
@@ -325,7 +432,10 @@ class Lowerer {
   private statement(s: Statement, topLevel: boolean): Expr[] {
     switch (s.kind) {
       case "Block":
-        return this.inScope(() => s.body.flatMap((child) => this.statement(child, false)));
+        return this.inScope(() => {
+          this.registerFunctions(s.body);
+          return s.body.flatMap((child) => this.statement(child, false));
+        });
       case "ExprStmt":
         if (s.expression.kind === "SuperCall") return [];
         return [this.effect(s.expression)];
@@ -364,9 +474,12 @@ class Lowerer {
       }
       case "VarDecl":
         return this.varDecl(s, topLevel);
-      case "FuncDecl":
-        this.unsupported(s.span, "a function declared inside a block");
+      case "FuncDecl": {
+        this.registerFunctions([s]);
+        const target = this.lookupFunction(s.name) as FuncBinding;
+        this.lowerFunction(s, target.wasm, this.owner, this.fn);
         return [];
+      }
       case "StructDecl":
         return [];
       case "ClassDecl":
@@ -421,14 +534,11 @@ class Lowerer {
   /**
    * A switch: the cases are tried in order against the value; the first that is equal starts running, and each body
    * falls into the next one until a break. The bodies are written one after the other, each after a block whose end
-   * is where its case jumps to, which is how fall-through comes for free.
+   * is where its case jumps to, which is how fall-through comes for free. A reference (an object, a struct, an array)
+   * is an address, and cases match it by identity, as `==` does.
    */
   private switchStatement(s: Switch): Expr[] {
     const subjectType = this.typeOf(s.discriminant);
-    if (!isWhole(subjectType) && subjectType !== "float" && subjectType !== "string") {
-      this.unsupported(s.discriminant.span, `a switch on a ${subjectType}`);
-      return [];
-    }
     const subject = this.fresh("subject");
     this.locals.push({ name: subject, type: valType(subjectType) });
     const end = this.fresh("break");
@@ -1039,6 +1149,8 @@ class Lowerer {
     // Inside a method, `speak()` means `this.speak()`; the methods of the class come before functions.
     const own = this.owner === null ? null : this.checked.classes.findMethod(this.owner, name);
     if (this.owner !== null && own !== null) return this.invoke(this.owner, own, ir.get("this"), e, false, false);
+    const nested = this.lookupFunction(name);
+    if (nested !== null) return this.callNested(e, nested);
     const decl = this.checked.functions.get(name);
     if (decl === undefined) return this.builtin(e, name);
     const returns = typeNameOfReturn(decl);
@@ -1207,19 +1319,17 @@ class Lowerer {
    * values of this class's fields, then the rest of the body. The object already exists, with every field at zero.
    */
   private constructorFunction(cls: ClassInfo, ctor: CtorDecl | null): void {
-    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner };
+    const saved = { locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner, fn: this.fn };
     this.locals = [];
     this.loops = [];
     this.returnType = "void";
     this.owner = cls;
+    this.fn = this.makeFn(null, false, ctor?.params ?? [], ctor?.body.body ?? []);
     const fields = this.fieldScope(cls);
     const own = new Map<string, Binding>();
     this.scopes = [this.topScope, fields, own];
-    const params: Local[] = (ctor?.params ?? []).map((param) => {
-      const type = paramType(param);
-      own.set(param.name, { wasm: param.name, type, kind: "local" });
-      return { name: param.name, type: valType(type) };
-    });
+    const params: Local[] = (ctor?.params ?? []).map((param) => this.bindParameter(own, param));
+    this.registerFunctions(ctor?.body.body ?? []);
 
     const body: Expr[] = [];
     if (cls.parent !== null) {
@@ -1240,8 +1350,8 @@ class Lowerer {
     }
     this.scopes = [this.topScope, fields, own];
     if (ctor !== null) for (const statement of ctor.body.body) body.push(...this.statement(statement, false));
-    this.functions.push({ name: this.constructorName(cls, params.length), params: [{ name: "this", type: "i32" }, ...params], results: [], locals: this.locals, body });
-    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner } = saved);
+    this.functions.push({ name: this.constructorName(cls, params.length), params: [{ name: "this", type: "i32" }, ...params], results: [], locals: this.locals, body: this.withFrame(body, ctor?.span ?? cls.decl.span) });
+    ({ locals: this.locals, scopes: this.scopes, loops: this.loops, returnType: this.returnType, owner: this.owner, fn: this.fn } = saved);
   }
 
   /** `new Dog("Rex", 3)`: memory for the object, its vtable, then its constructor. */
@@ -1433,6 +1543,80 @@ const isMemoryRuntime = (name: string): name is MemoryRuntimeName => MEMORY_RUNT
 
 function typeNameOfReturn(decl: FuncDecl | MethodDecl): string {
   return decl.returnType.name + "[]".repeat(decl.returnType.dims);
+}
+
+/** The functions declared inside these statements, at any depth of blocks and loops, but not the ones inside those functions. */
+function nestedFunctions(statements: readonly Statement[]): FuncDecl[] {
+  const found: FuncDecl[] = [];
+  const visit = (s: Statement | null): void => {
+    if (s === null) return;
+    switch (s.kind) {
+      case "FuncDecl":
+        found.push(s);
+        return;
+      case "Block":
+        s.body.forEach(visit);
+        return;
+      case "If":
+        visit(s.then);
+        visit(s.otherwise);
+        return;
+      case "While":
+      case "Foreach":
+        visit(s.body);
+        return;
+      case "For":
+        visit(s.body);
+        return;
+      case "Switch":
+        for (const branch of s.cases) branch.body.forEach(visit);
+        s.default?.body.forEach(visit);
+        return;
+      default:
+        return;
+    }
+  };
+  statements.forEach(visit);
+  return found;
+}
+
+/** The names of the variables these statements declare (not those of the functions declared inside them), one per declaration. */
+function declaredNames(statements: readonly Statement[]): string[] {
+  const names: string[] = [];
+  const visit = (s: Statement | null): void => {
+    if (s === null) return;
+    switch (s.kind) {
+      case "VarDecl":
+        names.push(s.name);
+        return;
+      case "Block":
+        s.body.forEach(visit);
+        return;
+      case "If":
+        visit(s.then);
+        visit(s.otherwise);
+        return;
+      case "While":
+        visit(s.body);
+        return;
+      case "Foreach":
+        names.push(s.name);
+        visit(s.body);
+        return;
+      case "For":
+        visit(s.init);
+        visit(s.body);
+        return;
+      case "Switch":
+        for (const branch of s.cases) branch.body.forEach(visit);
+        s.default?.body.forEach(visit);
+        return;
+      default:
+        return;
+    }
+  };
+  statements.forEach(visit);
+  return names;
 }
 
 /** Every name a statement mentions as a variable (read, assigned or updated), at any depth. */

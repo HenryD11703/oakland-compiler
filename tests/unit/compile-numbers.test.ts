@@ -154,14 +154,7 @@ describe("runtime mistakes end a compiled run with the interpreter's own words (
   });
 });
 
-describe("what the compiler does not translate yet is said, not guessed", () => {
-  it("names the construct and where it is", () => {
-    const result = compile("if (true) {\n  int f() { return 1; }\n}");
-    expect(result.ok).toBe(false);
-    expect(result.diagnostics[0]?.message).toBe("a function declared inside a block cannot be compiled yet");
-    expect(result.diagnostics[0]?.span.start.line).toBe(2);
-  });
-
+describe("what the compiler is given and cannot translate is said, not guessed", () => {
   it("does not compile a program with type mistakes, and returns them", () => {
     const result = compile("int a = \"x\";");
     expect(result.ok).toBe(false);

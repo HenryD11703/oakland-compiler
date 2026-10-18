@@ -51,11 +51,24 @@ Animal[] zoo = {a, d, new Animal("Generic"), null};
 for (Animal z : zoo) { if (z != null) { z.speak(); } }
 System.out.println(d.marks, d.friend == a, typeof d, d);
 `;
+const NESTED_FEATURES = `
+int total(int a, int b) {
+    int bonus = 10; int[] log = new int[3];
+    int inner(int k) { log[0] += k; bonus++; return a + b + bonus + k; }
+    void deeper() { int z = 2; void tiny() { bonus += z; } tiny(); }
+    deeper();
+    return inner(1) + inner(2) + log[0];
+}
+class Box { int v = 3; int get(int d) { int add() { return v + d; } return add(); } }
+System.out.println(total(1, 2), new Box().get(4));
+for (int i = 0; i < 3; i++) { int sq() { return i * i; } System.out.println(sq()); }
+`;
 const examples = join(import.meta.dirname, "..", "..", "src", "examples");
 export const BASES: string[] = [
   ...readdirSync(fixtures).sort().map((file) => readFileSync(join(fixtures, file), "utf8")),
   FEATURES,
   CLASS_FEATURES,
+  NESTED_FEATURES,
   ...["animals.oak", "bank-account.oak", "linked-list.oak"].map((file) => readFileSync(join(examples, file), "utf8")),
 ];
 
