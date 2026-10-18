@@ -211,7 +211,7 @@ test.describe("syntax tree and symbols (AC-29, AC-30)", () => {
   });
 
   test("the whole view opens from the top bar, selects a node and shows it in the code", async ({ page }) => {
-    await page.getByRole("button", { name: "Syntax tree", exact: true }).click();
+    await page.getByRole("group", { name: "Whole views" }).getByRole("button", { name: "Syntax tree" }).click();
     const whole = page.getByRole("main", { name: "Syntax tree, whole view" });
     await expect(whole).toBeVisible();
     await expect(page.locator(".sheet")).toBeHidden();
@@ -224,7 +224,7 @@ test.describe("syntax tree and symbols (AC-29, AC-30)", () => {
   });
 
   test("folding a node hides what is below it, and Escape closes the whole view", async ({ page }) => {
-    await page.getByRole("button", { name: "Syntax tree", exact: true }).click();
+    await page.getByRole("group", { name: "Whole views" }).getByRole("button", { name: "Syntax tree" }).click();
     const whole = page.getByRole("main", { name: "Syntax tree, whole view" });
     await whole.getByRole("button", { name: "Expand all" }).click();
     const before = await whole.locator(".tree-pick").count();
@@ -235,6 +235,44 @@ test.describe("syntax tree and symbols (AC-29, AC-30)", () => {
     await expect(whole.locator(".tree-pick")).not.toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(whole).toBeHidden();
+  });
+
+  test("the top bar opens a whole view for the output, the problems and the symbols too", async ({ page }) => {
+    for (const [name, text] of [["Output", /./], ["Problems", /./], ["Symbols", /absY/]] as const) {
+      await page.getByRole("group", { name: "Whole views" }).getByRole("button", { name }).click();
+      const whole = page.getByRole("main", { name: `${name}, whole view` });
+      await expect(whole).toBeVisible();
+      await expect(whole).toContainText(text);
+      await page.keyboard.press("Escape");
+      await expect(whole).toBeHidden();
+    }
+  });
+
+  test("the tree can be zoomed with the buttons and the wheel, fitted, and dragged", async ({ page }) => {
+    await page.getByRole("group", { name: "Whole views" }).getByRole("button", { name: "Syntax tree" }).click();
+    const whole = page.getByRole("main", { name: "Syntax tree, whole view" });
+    const zoom = whole.locator(".zoom");
+    await expect(zoom).toHaveText("100%");
+    await whole.getByRole("button", { name: "Zoom in" }).click();
+    await expect(zoom).toHaveText("125%");
+    const box = (await whole.locator(".tree-scroll").boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.wheel(0, -300);
+    await expect.poll(async () => Number.parseInt((await zoom.textContent()) ?? "0")).toBeGreaterThan(125);
+    await whole.getByRole("button", { name: "Fit" }).click();
+    // Fit leaves the whole drawing inside the box (or bigger than 100% when it is small).
+    await expect.poll(() => whole.locator(".tree-scroll").evaluate((el) => el.scrollWidth <= el.clientWidth + 1 && el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+    await whole.getByRole("button", { name: "100%", exact: true }).click();
+    await expect(zoom).toHaveText("100%");
+    await whole.getByRole("button", { name: "Expand all" }).click();
+    for (let i = 0; i < 5; i++) await whole.getByRole("button", { name: "Zoom in" }).click();
+    const scroller = whole.locator(".tree-scroll");
+    const before = await scroller.evaluate((el) => el.scrollTop);
+    await page.mouse.move(box.x + 6, box.y + 6);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 6, box.y + 90, { steps: 4 });
+    await page.mouse.up();
+    expect(await scroller.evaluate((el) => el.scrollTop)).not.toBe(before);
   });
 
   test("the panel has a button for the whole view", async ({ page }) => {
