@@ -40,10 +40,10 @@
 - ✅ **T54 Benchmarks and numbers.** The final `npm run bench` table, in Node and in a browser, labelled. *Done when:* the numbers are in the README with the machine named, whatever they are. Covers: S-22.
 
 ## Phase E — The product (4 sessions)
-- 🟡 **T55 Design: three mockups.** The Compiled panel, the mode switch and Compare, at 1280 and 375 px, with real data from the sieve example, in the dark theme. *Done when:* Henry picks one (**approval gate b**). Covers: S-28.
-- **T56 Worker protocol.** `compile` and `runCompiled` messages; Stop; the hard timeout; a fresh worker per run. *Done when:* an E2E ends a compiled infinite loop and the page stays usable. Covers: S-20, S-26.
-- **T57 Interface.** Mode switch, Compiled panel with foldable functions and the jump to source, sizes and times, Compare. *Done when:* the flow "pick Sieve → Compile → see the WAT → Compare" works by mouse and by keyboard. Covers: S-23 to S-25.
-- **T58 E2E and accessibility.** Playwright at 1280 and 375 px with axe on the new panels. *Done when:* CI is green. Covers: S-27.
+- ✅ **T55 Design: three mockups.** The Compiled panel, the mode switch and Compare, at 1280 and 375 px, with real data from the sieve example, in the dark theme. *Done when:* Henry picks one (**approval gate b**). Covers: S-28.
+- ✅ **T56 Worker protocol.** `compile` and `runCompiled` messages; Stop; the hard timeout; a fresh worker per run. *Done when:* an E2E ends a compiled infinite loop and the page stays usable. Covers: S-20, S-26.
+- ✅ **T57 Interface.** Mode switch, Compiled panel with foldable functions and the jump to source, sizes and times, Compare. *Done when:* the flow "pick Sieve → Compile → see the WAT → Compare" works by mouse and by keyboard. Covers: S-23 to S-25.
+- ✅ **T58 E2E and accessibility.** Playwright at 1280 and 375 px with axe on the new panels. *Done when:* CI is green. Covers: S-27.
 
 ## Phase F — Closing (2 sessions)
 - **T59 Documentation.** `COMPILER.md` with the worked example, `ARCHITECTURE.md`, `LANGUAGE.md`, `language-changes.md`, the repository `README.md` and `CLAUDE.md` for stage 2. *Done when:* a person who has never seen the project can follow `COMPILER.md` from a source line to its bytes. Covers: S-29, S-31.

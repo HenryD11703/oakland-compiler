@@ -26,6 +26,8 @@ interface EditorProps {
   readonly initialText: string;
   readonly onChange: (text: string) => void;
   readonly onRun: () => void;
+  /** The line the cursor is on, whenever the selection moves. */
+  readonly onCursorLine?: (line: number) => void;
   readonly diagnostics: readonly Diagnostic[];
   /** The source the interpreter is working on at the current step, to be marked. */
   readonly activeSpan: Span | null;
@@ -146,11 +148,11 @@ function toLint(diagnostic: Diagnostic, length: number): CmDiagnostic {
   return { from, to, severity: "error", message: diagnostic.message, source: diagnostic.phase };
 }
 
-export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ initialText, onChange, onRun, diagnostics, activeSpan, inline }, ref) {
+export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ initialText, onChange, onRun, onCursorLine, diagnostics, activeSpan, inline }, ref) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const callbacks = useRef({ onChange, onRun });
-  callbacks.current = { onChange, onRun };
+  const callbacks = useRef({ onChange, onRun, onCursorLine });
+  callbacks.current = { onChange, onRun, onCursorLine };
 
   useEffect(() => {
     const parent = host.current;
@@ -177,6 +179,7 @@ export const Editor = forwardRef<EditorHandle, EditorProps>(function Editor({ in
         EditorView.contentAttributes.of({ "aria-label": "OakLand source code", spellcheck: "false", autocapitalize: "off", autocorrect: "off", tabindex: "0" }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacks.current.onChange(update.state.doc.toString());
+          if (update.selectionSet && !update.docChanged) callbacks.current.onCursorLine?.(update.state.doc.lineAt(update.state.selection.main.head).number);
         }),
       ],
     });

@@ -18,7 +18,8 @@ OakLand began as a university project for the compilers course (OLC2, USAC): an 
 - **Read mistakes, not stack traces.** Every problem (syntax, types, names, arguments, bounds, division by zero, runaway loops) is a message with a line and column, underlined in the editor and listed under *Problems*. A bad program never crashes the page.
 - **Look inside.** *Syntax tree* draws how the interpreter parsed the program as a tree (fold any node, zoom, open it as a whole view from the top bar), *Symbols* lists every name it declares; clicking either jumps to the source.
 - **Arrange the panels.** Drag the dividers (or focus one and use the arrow keys) to give the code, the variables or the output more room; the sizes are remembered. The page is dark.
-- **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Structs, Animals, Bank account, Linked list, Heart, Mistakes), open a `.oak` file, or save yours.
+- **Compile it.** The mode switch next to *Examples* turns the page into a compiler: your source on the left, the **WebAssembly** it became on the right, one foldable block per function (a function of yours points at the source lines it came from, and a click in the source opens its function). The numbers of the module (bytes, time to compile, time to run) take the place of the timeline, and **Compare** runs both modes on the same program: two bars on a scale where each step is ten times more, the ratio, and whether the outputs are identical. A compiled program that never ends is stopped by **Stop** or after five seconds.
+- **Try examples** (Hello, Basics, Control flow, Arrays, Functions, Sieve, Structs, Animals, Bank account, Linked list, Heart, Mistakes), open a `.oak` file, or save yours.
 
 | Mistakes with their positions | A recursive call stack | On a phone (375 px) |
 |---|---|---|
@@ -45,7 +46,7 @@ The full reference is [`docs/LANGUAGE.md`](docs/LANGUAGE.md). **Every example in
 
 ## How fast
 
-The page runs programs with the interpreter. Underneath it there is also a **compiler to WebAssembly** (`src/core/compile/`): the same programs, checked by the same type checker, turned into a module the browser runs natively. The page does not offer it yet; these are the numbers of the engine, measured with `npm run bench` (Node) and `npm run bench:browser` (Chromium). Both check that the two modes print the same text before they time anything.
+The page runs programs with the interpreter, and, in **Compile** mode, with a **compiler to WebAssembly** (`src/core/compile/`): the same programs, checked by the same type checker, turned into a module the browser runs natively. These are the numbers of the engine, measured with `npm run bench` (Node) and `npm run bench:browser` (Chromium); the page's Compare shows the same thing for any program, one run of each. Both check that the two modes print the same text before they time anything.
 
 **Node 22.23.3** on an Intel Core i3-9100F @ 3.60 GHz (4 threads, 8 GiB), WSL2 on Windows, 2026-10-18. Median of 5 runs after a warm-up, times in milliseconds.
 
@@ -99,7 +100,7 @@ Node 20.19 or newer. Nothing else: no backend, no Docker, no environment variabl
 src/core/       the interpreter: lexer, parser, tree-walking interpreter, trace, symbols. No DOM.
 src/worker/     runs a program in a Web Worker; Stop ends the worker
 src/ui/         React interface, CodeMirror 6 editor, timeline
-src/examples/   the eleven example programs (English)
+src/examples/   the twelve example programs (English)
 docs/           principles, spec, plan, tasks, language reference, design notes
 tests/ e2e/     unit, golden, fuzz and documentation tests; Playwright end-to-end tests
 ```

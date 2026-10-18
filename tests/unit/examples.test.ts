@@ -8,20 +8,25 @@ const byId = (id: string) => (EXAMPLES.find((e) => e.id === id) as (typeof EXAMP
 
 describe("the examples menu (AC-32)", () => {
   it("has the planned examples, each named and described", () => {
-    expect(EXAMPLES.map((e) => e.id)).toEqual(["hello", "basics", "control-flow", "arrays", "functions", "structs", "animals", "bank-account", "linked-list", "heart", "mistakes"]);
+    expect(EXAMPLES.map((e) => e.id)).toEqual(["hello", "basics", "control-flow", "arrays", "functions", "sieve", "structs", "animals", "bank-account", "linked-list", "heart", "mistakes"]);
     for (const example of EXAMPLES) {
       expect(example.title.length).toBeGreaterThan(0);
       expect(example.blurb.length).toBeGreaterThan(10);
     }
   });
 
-  it.each(EXAMPLES.filter((e) => e.id !== "mistakes").map((e) => [e.id, e.source] as const))("%s runs cleanly", (_id, source) => {
+  // The sieve is long on purpose (9 million steps: it is the example for Compile and Compare), so its trace is cut at 20,000 steps.
+  it.each(EXAMPLES.filter((e) => e.id !== "mistakes").map((e) => [e.id, e.source] as const))("%s runs cleanly", (id, source) => {
     const result = run(source);
     expect(result.ran).toBe(true);
     expect(result.diagnostics.map((d) => d.message)).toEqual([]);
     expect(result.stoppedEarly).toBe(false);
-    expect(result.trace?.truncated).toBe(false);
+    expect(result.trace?.truncated).toBe(id === "sieve");
     expect(result.stdout.length).toBeGreaterThan(0);
+  });
+
+  it("sieve counts the primes up to 200,000", () => {
+    expect(run(byId("sieve")).stdout.trim()).toBe("17984");
   });
 
   it("hello prints its greeting", () => {

@@ -9,6 +9,7 @@
   --edge: #4a463b; /* borders between panels */
   --mark: #ff6b3d; /* the proofreader's red: the one accent, for "now" and "changed" */
   --mark-wash: rgba(255, 107, 61, 0.13);
+  --ok: #9fd38a; /* only for "the outputs are identical" */
   --ui: "Instrument Sans Variable", system-ui, sans-serif;
   --mono: "Spline Sans Mono Variable", ui-monospace, Menlo, Consolas, monospace;
   color-scheme: dark;
@@ -168,7 +169,7 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
 .fullbody { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .fullbody pre.out { font-size: 15px; flex: 1; }
 .fullbody table { font-size: 14px; }
-.app[data-full] > .sheet, .app[data-full] > .tape, .app[data-full] > .mtabs-nav { display: none; }
+.app[data-full] > .sheet, .app[data-full] > .tape, .app[data-full] > .compilebar, .app[data-full] > .mtabs-nav { display: none; }
 /* The four whole views, in the top bar. */
 .whole-views { display: flex; gap: 2px; border: 1px solid var(--edge); }
 .whole-views button { background: none; border: 0; padding: 3px 12px; font-weight: 500; color: var(--dim); }
@@ -231,6 +232,66 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
 .tl-mark-fill { fill: var(--mark); }
 .tl-dim-line { stroke: var(--dim); fill: none; }
 
+/* ---------- Compile mode ---------- */
+/* The mode switch, next to Examples: the same kind of control as the whole views. */
+.seg { display: inline-flex; border: 1px solid var(--edge); }
+.seg button { background: none; border: 0; padding: 3px 12px; font-weight: 500; color: var(--dim); }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); font-weight: 600; }
+
+/* Two columns that read together: the source (5/12) and the WebAssembly it became (7/12). */
+.sheet[data-mode="compile"] { grid-template-columns: minmax(0, 5fr) 9px var(--side-w, minmax(0, 7fr)); }
+.wasm-side { overflow: hidden; }
+.wasm-panel { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 12px; }
+.wasm-empty { padding-top: 14px; }
+.wasm-head { display: flex; align-items: baseline; gap: 10px; padding: 10px 0 6px; position: sticky; top: 0; background: var(--paper); z-index: 1; border-bottom: 1px solid var(--rule); }
+.wasm-head .mini { margin-left: auto; }
+.mini { background: none; border: 1px solid var(--edge); padding: 1px 8px; font-size: 12px; font-weight: 500; }
+.mini:hover { border-color: var(--ink); }
+.wasm-fn { border-bottom: 1px solid var(--rule); }
+.wasm-fnhead { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; flex-wrap: wrap; }
+.wasm-toggle { background: none; border: 0; padding: 0; display: inline-flex; align-items: baseline; gap: 4px; text-align: left; }
+.wasm-toggle .fold { width: 16px; color: var(--dim); }
+.wasm-toggle .fname { font: 600 13px/1.7 var(--mono); }
+.wasm-jump { background: none; border: 0; padding: 0; font-size: 12.5px; color: var(--mark); border-bottom: 1px dotted var(--mark); }
+.wasm-fnhead .count { margin-left: auto; font: 12px var(--mono); color: var(--dim); }
+.chip { display: inline-block; font: 600 11px/1 var(--ui); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 6px; border: 1px solid var(--edge); color: var(--dim); }
+.chip.yours { border-color: var(--mark); color: var(--mark); }
+pre.wat { margin: 0 0 10px; padding-left: 16px; font: 12.5px/1.55 var(--mono); white-space: pre; width: max-content; min-width: 100%; }
+.w-id { color: var(--mark); } .w-op { font-weight: 600; } .w-ty, .w-kw { color: var(--dim); } .w-kw { font-weight: 600; } .w-num { color: #d9bf7e; }
+.note { color: var(--dim); font-size: 12.5px; }
+
+/* The output and the problems fold into one line under the WebAssembly, and open on a click. */
+.results { flex: none; display: flex; flex-direction: column; border-top: 1px solid var(--edge); max-height: 52%; min-height: 0; }
+.under { display: flex; gap: 20px; align-items: baseline; padding: 7px 24px; background: none; border: 0; text-align: left; font: 13px var(--mono); width: 100%; }
+.under .k { color: var(--dim); font: 600 11px var(--ui); letter-spacing: 0.09em; text-transform: uppercase; margin-right: 4px; }
+.under .grow { margin-left: auto; font-family: var(--ui); }
+.under:hover .grow { color: var(--ink); }
+.results > .views { min-height: 0; flex: 1; overflow: auto; border-top: 1px solid var(--rule); border-bottom: 0; }
+.results > .views [role="tabpanel"] { flex: 1; }
+
+/* Where the tape was: the numbers of the module, and the way to Compare. */
+.compilebar { flex: none; border-top: 1px solid var(--edge); background: var(--paper-2); }
+.ledger { display: flex; align-items: center; gap: 36px; padding: 12px 24px; flex-wrap: wrap; }
+.ledger .big { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.ledger .big small { font-size: 12.5px; color: var(--dim); font-weight: 400; letter-spacing: 0; }
+.ledger .why { max-width: 300px; }
+.ledger .compare { margin-left: auto; border: 1px solid var(--ink); background: none; padding: 6px 16px; font-weight: 600; white-space: nowrap; }
+.ledger .compare:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.chart { display: flex; gap: 24px; align-items: center; padding: 14px 24px 12px; }
+.chart .rows { flex: 1; min-width: 0; display: grid; grid-template-columns: 84px minmax(0, 1fr) 96px; gap: 8px 14px; align-items: center; }
+.chart .track { position: relative; height: 18px; background-image: repeating-linear-gradient(to right, var(--rule) 0, var(--rule) 1px, transparent 1px, transparent 20%); border-left: 1px solid var(--rule); }
+.chart .fill { position: absolute; inset: 4px auto 4px 0; background: var(--ink); }
+.chart .fill.fast { background: var(--mark); }
+.chart .val { font: 600 15px var(--mono); text-align: right; }
+.chart .axis { grid-column: 2; display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--dim); }
+.chart .foot { grid-column: 1 / -1; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+.chart .foot .mini { margin-left: auto; }
+.chart .ratio { font-size: 64px; font-weight: 700; letter-spacing: -0.05em; color: var(--mark); line-height: 1; text-align: right; flex: none; }
+.chart .ratio small { display: block; font-size: 13px; letter-spacing: 0; font-weight: 500; color: var(--dim); }
+.same { color: var(--ok); font-weight: 600; }
+.differ { color: var(--mark); font-weight: 700; }
+
 /* ---------- phone ---------- */
 @media (max-width: 760px) {
   body { border-top-width: 4px; }
@@ -257,6 +318,19 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
   .sheet[data-view="state"] .views { display: none; }
   .sheet[data-view="views"] .now, .sheet[data-view="views"] .vars { display: none; }
   .sheet[data-view="views"] .views { min-height: 0; }
+  .sheet[data-mode="compile"] { display: block; overflow: auto; }
+  .sheet[data-mode="compile"][data-view="state"] .results, .sheet[data-mode="compile"][data-view="views"] .wasm-panel { display: none; }
+  .wasm-side { overflow: visible; }
+  .wasm-panel { padding: 0 16px 12px; overflow: visible; }
+  .under { padding: 8px 16px; flex-wrap: wrap; gap: 4px 16px; }
+  .results { max-height: none; }
+  .ledger { gap: 10px 20px; padding: 10px 16px; }
+  .ledger .why { max-width: none; flex-basis: 100%; }
+  .ledger .compare { margin-left: 0; flex-basis: 100%; text-align: center; }
+  .chart { flex-direction: column; align-items: stretch; padding: 12px 16px; gap: 6px; }
+  .chart .rows { grid-template-columns: 64px minmax(0, 1fr) 76px; gap: 8px; }
+  .chart .ratio { text-align: left; font-size: 44px; }
+  .chart .axis span:nth-child(even) { display: none; }
   .block { padding: 14px 16px; }
   .deck { padding: 8px 16px; gap: 6px; }
   .deck button { flex: 1; }

@@ -3,7 +3,9 @@ import { parse } from "../core/parser/parser";
 import { renderValue, TraceReplayer } from "../core/trace/replay";
 import { DEFAULT_EXAMPLE, EXAMPLES } from "../examples";
 import { RunClient } from "../worker/client";
-import type { RunOutcome } from "../worker/protocol";
+import type { CompareOutcome, CompileOutcome, RunOutcome } from "../worker/protocol";
+import { CompareBars, Ledger } from "./CompileBar";
+import { CompiledPanel } from "./CompiledPanel";
 import type { EditorHandle, InlineEntry } from "./Editor";
 import { assignedNames } from "./inlineValues";
 import { DEFAULT_LAYOUT, loadLayout, saveLayout, type Layout } from "./layout";
@@ -77,6 +79,17 @@ export function App() {
   const [view, setView] = useState<View>("code");
   const [menu, setMenu] = useState(false);
   const [layout, setLayout] = useState<Layout>(loadLayout);
+  /** Interpret watches a run step by step; Compile turns the program into WebAssembly and runs that. */
+  const [mode, setMode] = useState<"interpret" | "compile">("interpret");
+  const [compiled, setCompiled] = useState<CompileOutcome | null>(null);
+  const [compiledStale, setCompiledStale] = useState(false);
+  /** Each module the page shows gets a number, so that the panel starts afresh with a new one. */
+  const [compiledId, setCompiledId] = useState(0);
+  const [comparison, setComparison] = useState<CompareOutcome | null>(null);
+  /** Compile mode: is the output-and-problems drawer open? */
+  const [drawer, setDrawer] = useState(false);
+  const [marked, setMarked] = useState<{ from: number; to: number } | null>(null);
+  const [focusFn, setFocusFn] = useState<{ name: string; nonce: number } | null>(null);
 
   // ---------- panel sizes ----------
 
@@ -128,6 +141,64 @@ export function App() {
     }
   }, [client]);
 
+  const compileRun = useCallback(async () => {
+    const token = ++runToken.current;
+    const text = sourceRef.current;
+    setBusy(true);
+    setMessage(null);
+    setComparison(null);
+    setMarked(null);
+    const end = await client.compile(text);
+    if (token !== runToken.current) return;
+    setBusy(false);
+    if (end.kind === "done") {
+      setCompiled(end.outcome);
+      setCompiledId((n) => n + 1);
+      setCompiledStale(sourceRef.current !== text);
+      if (!end.outcome.ok) setDrawer(true);
+    } else if (end.kind === "stopped") {
+      setMessage(end.timedOut ? "The compiled program was stopped after 5 seconds: it may never end." : "The run was stopped.");
+    } else {
+      setMessage(`The run failed: ${end.message}`);
+    }
+  }, [client]);
+
+  const compareRun = useCallback(async () => {
+    const token = ++runToken.current;
+    const text = sourceRef.current;
+    setBusy(true);
+    setMessage(null);
+    const end = await client.compare(text);
+    if (token !== runToken.current) return;
+    setBusy(false);
+    if (end.kind === "done") {
+      setComparison(end.outcome);
+      setCompiled(end.outcome.compiled);
+      setCompiledId((n) => n + 1);
+      setCompiledStale(sourceRef.current !== text);
+    } else if (end.kind === "stopped") {
+      setMessage(end.timedOut ? "The comparison was stopped after 12 seconds: a program that never ends cannot be compared." : "The run was stopped.");
+    } else {
+      setMessage(`The run failed: ${end.message}`);
+    }
+  }, [client]);
+
+  /** What Run, Ctrl+Enter and loading an example do: the current mode's run. */
+  const go = useCallback(() => (mode === "compile" ? compileRun() : run()), [mode, compileRun, run]);
+
+  const switchMode = useCallback(
+    (next: "interpret" | "compile") => {
+      if (next === mode) return;
+      runToken.current++;
+      client.stop();
+      setBusy(false);
+      setMessage(null);
+      setFull((before) => (before === "symbols" && next === "compile" ? null : before));
+      setMode(next);
+    },
+    [mode, client],
+  );
+
   const stop = useCallback(() => {
     runToken.current++;
     client.stop();
@@ -152,6 +223,7 @@ export function App() {
     sourceRef.current = text;
     setSource(text);
     setStale(true);
+    setCompiledStale(true);
     saveDraft(text);
   }, []);
 
@@ -167,9 +239,9 @@ export function App() {
       else setInitial({ title: name, text });
       sourceRef.current = text;
       setSource(text);
-      void run();
+      void go();
     },
-    [run],
+    [go],
   );
 
   const fileInput = useRef<HTMLInputElement>(null);
@@ -215,7 +287,8 @@ export function App() {
 
   const deferred = useDeferredValue(source);
   const syntax = useMemo(() => parse(deferred).diagnostics, [deferred]);
-  const diagnostics = syntax.length > 0 ? syntax : outcome && !stale ? outcome.result.diagnostics : [];
+  const compileMode = mode === "compile";
+  const diagnostics = syntax.length > 0 ? syntax : compileMode ? (compiled && !compiledStale ? [...compiled.diagnostics, ...(compiled.ran?.diagnostics ?? [])] : []) : outcome && !stale ? outcome.result.diagnostics : [];
 
   const trace = outcome?.result.trace ?? null;
   const steps = trace?.steps.length ?? 0;
@@ -230,11 +303,15 @@ export function App() {
   const current = trace && step >= 0 ? trace.steps[step] : undefined;
   const showingRun = outcome !== null && !stale;
 
-  const activeSpan = showingRun && current && current.kind !== "end" ? current.span : null;
+  const markedSpan = useMemo(
+    () => (marked === null ? null : { start: { offset: 0, line: marked.from, column: 1 }, end: { offset: 0, line: marked.to, column: 1 } }),
+    [marked],
+  );
+  const activeSpan = compileMode ? markedSpan : showingRun && current && current.kind !== "end" ? current.span : null;
 
   const names = useMemo(() => (outcome ? assignedNames(outcome.result.ast) : new Map<number, string[]>()), [outcome]);
   const inline = useMemo<InlineEntry[]>(() => {
-    if (!showingRun || !state || step < 0) return [];
+    if (compileMode || !showingRun || !state || step < 0) return [];
     const entries: InlineEntry[] = [];
     for (const [line, lineNames] of names) {
       const parts: InlineEntry["parts"][number][] = [];
@@ -245,7 +322,7 @@ export function App() {
       if (parts.length > 0) entries.push({ line, parts });
     }
     return entries;
-  }, [showingRun, state, step, names]);
+  }, [compileMode, showingRun, state, step, names]);
 
   // ---------- playback ----------
 
@@ -285,6 +362,67 @@ export function App() {
   const stdout = result ? (state && trace ? result.stdout.slice(0, state.outputLength) : result.stdout) : "";
   const totalLines = result && result.stdout !== "" ? result.stdout.replace(/\n$/, "").split("\n").length : 0;
   const lineCount = source.split("\n").length;
+  const viewStdout = compileMode ? (compiled?.ran?.stdout ?? "") : stdout;
+  const viewTotal = compileMode ? (viewStdout === "" ? 0 : viewStdout.replace(/\n$/, "").split("\n").length) : totalLines;
+  const viewRan = compileMode ? (compiled ? compiled.ok : true) : result ? result.ran || syntax.length === 0 : true;
+  const viewAst = compileMode ? (compiled?.ast ?? null) : (result?.ast ?? null);
+  const viewSymbols = compileMode ? [] : (result?.symbols ?? []);
+  const viewIds = compileMode ? VIEWS.filter(([id]) => id !== "symbols") : VIEWS;
+  const staleNow = compileMode ? compiledStale : stale;
+
+  /** The source cursor is in a function of the program: its WebAssembly opens (Compile mode). */
+  const onCursorLine = useCallback(
+    (line: number) => {
+      if (!compileMode || !compiled) return;
+      const inside = compiled.functions.filter((f) => f.source !== null && f.source.from <= line && line <= f.source.to);
+      const narrowest = inside.sort((x, y) => (x.source!.to - x.source!.from) - (y.source!.to - y.source!.from))[0];
+      if (narrowest) setFocusFn((before) => ({ name: narrowest.name, nonce: (before?.nonce ?? 0) + 1 }));
+    },
+    [compileMode, compiled],
+  );
+  const jumpToSource = useCallback((from: number, to: number) => {
+    setMarked({ from, to });
+    // The lines from..to as a range of the text, so that the editor selects exactly them.
+    const lines = sourceRef.current.split("\n");
+    const start = lines.slice(0, from - 1).reduce((offset, line) => offset + line.length + 1, 0);
+    const end = lines.slice(0, to).reduce((offset, line) => offset + line.length + 1, 0) - 1;
+    const span = { start: { offset: start, line: from, column: 1 }, end: { offset: Math.max(start, end), line: to, column: 1 } };
+    setView("code");
+    requestAnimationFrame(() => editor.current?.reveal(span));
+  }, []);
+
+  /** Output, Problems, Syntax tree and Symbols: beside the variables in Interpret mode, in the drawer in Compile mode. */
+  const viewsPanel = (
+    <>
+      <div className="tabrow">
+        <div role="tablist" className="tabs" aria-label="Views">
+          {viewIds.map(([id, label]) => (
+            <button key={id} type="button" role="tab" id={`tab-${id}`} aria-selected={tab === id} aria-controls={`pane-${id}`} onClick={() => setTab(id)}>
+              {label}
+              {id === "problems" && diagnostics.length > 0 ? <span className="badge">{diagnostics.length}</span> : null}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="expand" onClick={() => setFull(tab)}>
+          Full view ⤢
+        </button>
+      </div>
+      <div role="tabpanel" id="pane-out" aria-labelledby="tab-out" hidden={tab !== "out"} tabIndex={0}>
+        <OutputView text={viewStdout} total={viewTotal} ran={viewRan} />
+      </div>
+      <div role="tabpanel" id="pane-problems" aria-labelledby="tab-problems" hidden={tab !== "problems"} tabIndex={0}>
+        <ProblemsList diagnostics={diagnostics} onPick={reveal} />
+      </div>
+      <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"} tabIndex={0}>
+        <SyntaxTree ast={viewAst} onReveal={reveal} />
+      </div>
+      {compileMode ? null : (
+        <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"} tabIndex={0}>
+          <SymbolsTable symbols={viewSymbols} onPick={reveal} />
+        </div>
+      )}
+    </>
+  );
 
   const readout =
     trace && step >= 0
@@ -305,8 +443,16 @@ export function App() {
           <button type="button" className="link-button" aria-expanded={menu} aria-controls="examples-menu" onClick={() => setMenu(!menu)}>
             Examples ▾
           </button>
+          <div className="seg" role="group" aria-label="Mode">
+            <button type="button" aria-pressed={!compileMode} onClick={() => switchMode("interpret")}>
+              Interpret
+            </button>
+            <button type="button" aria-pressed={compileMode} onClick={() => switchMode("compile")}>
+              Compile
+            </button>
+          </div>
           <div className="whole-views" role="group" aria-label="Whole views">
-            {VIEWS.map(([id, label]) => (
+            {viewIds.map(([id, label]) => (
               <button key={id} type="button" aria-pressed={full === id} onClick={() => setFull(full === id ? null : id)}>
                 {label}
                 {id === "problems" && diagnostics.length > 0 ? <span className="badge">{diagnostics.length}</span> : null}
@@ -321,8 +467,8 @@ export function App() {
           <button type="button" className="stop" onClick={stop} disabled={!busy}>
             Stop
           </button>
-          <button type="button" className="run" onClick={() => void run()} disabled={busy}>
-            {busy ? "Running…" : "Run ▸"}
+          <button type="button" className="run" onClick={() => void go()} disabled={busy}>
+            {busy ? (compileMode ? "Compiling…" : "Running…") : compileMode ? "Compile ▸" : "Run ▸"}
           </button>
         </div>
         {menu ? (
@@ -357,11 +503,11 @@ export function App() {
         <input ref={fileInput} type="file" accept=".oak,.txt,text/plain" hidden onChange={(event) => { openFile(event.target.files?.[0]); event.target.value = ""; }} />
       </header>
 
-      {message || stale ? (
+      {message || staleNow ? (
         <div className="notice" role="status">
-          {stale && !message ? (
+          {staleNow && !message ? (
             <>
-              <strong>Edited since the last run.</strong> Press Run (Ctrl+Enter) to update the output and the timeline.
+              <strong>Edited since the last {compileMode ? "compile" : "run"}.</strong> Press {compileMode ? "Compile" : "Run"} (Ctrl+Enter) to update the {compileMode ? "WebAssembly and the output" : "output and the timeline"}.
             </>
           ) : (
             message
@@ -373,7 +519,7 @@ export function App() {
         <div className="mtabs" role="tablist" aria-label="Panel">
           {(["code", "state", "views"] as const).map((name) => (
             <button key={name} type="button" role="tab" aria-selected={view === name} onClick={() => setView(name)}>
-              {name === "code" ? "Code" : name === "state" ? "State" : "Views"}
+              {name === "code" ? "Code" : name === "state" ? (compileMode ? "WebAssembly" : "State") : compileMode ? "Results" : "Views"}
             </button>
           ))}
         </div>
@@ -388,15 +534,15 @@ export function App() {
             </button>
           </div>
           <div className="fullbody">
-            {full === "out" ? <OutputView text={stdout} total={totalLines} ran={result ? result.ran || syntax.length === 0 : true} /> : null}
+            {full === "out" ? <OutputView text={viewStdout} total={viewTotal} ran={viewRan} /> : null}
             {full === "problems" ? <ProblemsList diagnostics={diagnostics} onPick={reveal} /> : null}
-            {full === "tree" ? <SyntaxTree ast={result?.ast ?? null} onReveal={reveal} whole /> : null}
-            {full === "symbols" ? <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} /> : null}
+            {full === "tree" ? <SyntaxTree ast={viewAst} onReveal={reveal} whole /> : null}
+            {full === "symbols" ? <SymbolsTable symbols={viewSymbols} onPick={reveal} /> : null}
           </div>
         </main>
       ) : null}
 
-      <main className="sheet" data-view={view} ref={sheetRef} style={sheetStyle}>
+      <main className="sheet" data-view={view} data-mode={mode} ref={sheetRef} style={sheetStyle}>
         <Suspense
           fallback={
             <div className="code">
@@ -404,132 +550,137 @@ export function App() {
             </div>
           }
         >
-          <Editor ref={editor} initialText={initial.text} onChange={onEdit} onRun={() => void run()} diagnostics={diagnostics} activeSpan={activeSpan} inline={inline} />
+          <Editor ref={editor} initialText={initial.text} onChange={onEdit} onRun={() => void go()} onCursorLine={onCursorLine} diagnostics={diagnostics} activeSpan={activeSpan} inline={inline} />
         </Suspense>
 
         <Splitter orientation="vertical" target={sideRef} label="Resize the code and the side panels" min={320} max={maxSide} grow={-1} onResize={resizeSide} onReset={resetSide} />
 
-        <aside className="side" ref={sideRef}>
-          <section className="block now" aria-label="Current step" ref={nowRef}>
-            <div className="label">Now</div>
-            <div className="big" data-testid="readout">
-              {trace && step >= 0 ? (
-                <>
-                  Step {count(step + 1)} <small>of {count(steps)}</small>
-                </>
-              ) : (
-                <>{trace ? "Start" : "—"}</>
-              )}
-            </div>
-            <div className="what">
-              {!showingRun ? (
-                <span className="hint">{outcome ? "The source changed: this is the last run." : busy ? "Running…" : "Press Run."}</span>
-              ) : current && current.kind === "end" ? (
-                <b>Program finished</b>
-              ) : current ? (
-                <>
-                  Line {current.span.start.line} ·{" "}
-                  {current.kind === "condition" ? (
-                    <>
-                      condition <b>{current.note}</b>
-                    </>
-                  ) : current.kind === "return" ? (
-                    <>
-                      back from a call{current.note ? <>, <b>{current.note.replace("returned ", "")}</b></> : null}
-                    </>
-                  ) : current.kind === "iteration" ? (
-                    "next element"
-                  ) : (
-                    "statement ran"
-                  )}
-                </>
-              ) : (
-                <span className="hint">Before the first step.</span>
-              )}
-            </div>
-            <div className="progress">
-              <i style={{ width: steps > 1 && step >= 0 ? `${(step / (steps - 1)) * 100}%` : "0%" }} />
-            </div>
+        {compileMode ? (
+        <aside className="side wasm-side" ref={sideRef}>
+          <section className="wasm-panel" aria-label="Compiled" tabIndex={0}>
+            <CompiledPanel key={compiledId} outcome={compiled} busy={busy} focus={focusFn} onJump={jumpToSource} />
           </section>
-
-          <section className="block vars" aria-label="Variables" tabIndex={0} ref={varsRef}>
-            <div className="label">Variables</div>
-            <VariablesTable state={showingRun ? state : null} changes={changes} />
-          </section>
-
-          <Splitter orientation="horizontal" target={varsRef} label="Resize the variables and the views" min={72} max={maxVars} grow={1} onResize={resizeVars} onReset={resetVars} />
-
-          <section className="block views" aria-label="Views">
-            <div className="tabrow">
-            <div role="tablist" className="tabs" aria-label="Views">
-              {VIEWS.map(([id, label]) => (
-                <button key={id} type="button" role="tab" id={`tab-${id}`} aria-selected={tab === id} aria-controls={`pane-${id}`} onClick={() => setTab(id)}>
-                  {label}
-                  {id === "problems" && diagnostics.length > 0 ? <span className="badge">{diagnostics.length}</span> : null}
-                </button>
-              ))}
-            </div>
-            <button type="button" className="expand" onClick={() => setFull(tab)}>
-              Full view ⤢
+          <section className="results" aria-label="Output and problems">
+            <button type="button" className="under" aria-expanded={drawer || view === "views"} onClick={() => setDrawer(!drawer)}>
+              <span>
+                <span className="k">Output</span> <span className="mono" data-testid="under-output">{viewStdout === "" ? (compiled ? "nothing printed" : "—") : viewStdout.trim().split("\n")[0]}</span>
+                {viewTotal > 1 ? <span className="dim"> · {count(viewTotal)} lines</span> : null}
+              </span>
+              <span>
+                <span className="k">Problems</span> <span className="mono">{diagnostics.length === 0 ? "none" : diagnostics.length}</span>
+              </span>
+              <span className="grow dim">{drawer || view === "views" ? "Close ▾" : "Open ▴"}</span>
             </button>
-            </div>
-            <div role="tabpanel" id="pane-out" aria-labelledby="tab-out" hidden={tab !== "out"} tabIndex={0}>
-              <OutputView text={stdout} total={totalLines} ran={result ? result.ran || syntax.length === 0 : true} />
-            </div>
-            <div role="tabpanel" id="pane-problems" aria-labelledby="tab-problems" hidden={tab !== "problems"} tabIndex={0}>
-              <ProblemsList diagnostics={diagnostics} onPick={reveal} />
-            </div>
-            <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"} tabIndex={0}>
-              <SyntaxTree ast={result?.ast ?? null} onReveal={reveal} />
-            </div>
-            <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"} tabIndex={0}>
-              <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} />
-            </div>
+            {drawer || view === "views" ? <section className="block views" aria-label="Views">{viewsPanel}</section> : null}
           </section>
         </aside>
+        ) : (
+          <aside className="side" ref={sideRef}>
+            <section className="block now" aria-label="Current step" ref={nowRef}>
+              <div className="label">Now</div>
+              <div className="big" data-testid="readout">
+                {trace && step >= 0 ? (
+                  <>
+                    Step {count(step + 1)} <small>of {count(steps)}</small>
+                  </>
+                ) : (
+                  <>{trace ? "Start" : "—"}</>
+                )}
+              </div>
+              <div className="what">
+                {!showingRun ? (
+                  <span className="hint">{outcome ? "The source changed: this is the last run." : busy ? "Running…" : "Press Run."}</span>
+                ) : current && current.kind === "end" ? (
+                  <b>Program finished</b>
+                ) : current ? (
+                  <>
+                    Line {current.span.start.line} ·{" "}
+                    {current.kind === "condition" ? (
+                      <>
+                        condition <b>{current.note}</b>
+                      </>
+                    ) : current.kind === "return" ? (
+                      <>
+                        back from a call{current.note ? <>, <b>{current.note.replace("returned ", "")}</b></> : null}
+                      </>
+                    ) : current.kind === "iteration" ? (
+                      "next element"
+                    ) : (
+                      "statement ran"
+                    )}
+                  </>
+                ) : (
+                  <span className="hint">Before the first step.</span>
+                )}
+              </div>
+              <div className="progress">
+                <i style={{ width: steps > 1 && step >= 0 ? `${(step / (steps - 1)) * 100}%` : "0%" }} />
+              </div>
+            </section>
+
+            <section className="block vars" aria-label="Variables" tabIndex={0} ref={varsRef}>
+              <div className="label">Variables</div>
+              <VariablesTable state={showingRun ? state : null} changes={changes} />
+            </section>
+
+            <Splitter orientation="horizontal" target={varsRef} label="Resize the variables and the views" min={72} max={maxVars} grow={1} onResize={resizeVars} onReset={resetVars} />
+
+            <section className="block views" aria-label="Views">
+              {viewsPanel}
+            </section>
+          </aside>
+        )}
       </main>
 
-      <footer className="tape" aria-label="Step through the run">
-        <div className="deck">
-          <button type="button" aria-label="Back to the start" onClick={() => seek(-1)} disabled={!trace}>
-            |◂
-          </button>
-          <button type="button" aria-label="Back one step" onClick={() => seek(Math.max(-1, step - 1))} disabled={!trace}>
-            ◂
-          </button>
-          <button type="button" className="play" onClick={() => setPlaying(!playing)} disabled={!trace}>
-            {playing ? "Pause" : "Play"}
-          </button>
-          <button type="button" aria-label="Forward one step" onClick={() => seek(Math.min(steps - 1, step + 1))} disabled={!trace}>
-            ▸
-          </button>
-          <label>
-            Speed
-            <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} disabled={!trace}>
-              {SPEEDS.map((s, i) => (
-                <option key={s.label} value={i}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="readout" aria-live="off">
-            {trace ? (
-              <>
-                {step >= 0 ? count(step + 1) : "0"} / {count(steps)}
-                {trace.truncated ? <small> · trace cut at {count(steps)} steps</small> : null}
-              </>
-            ) : (
-              "—"
-            )}
-          </div>
-        </div>
-        {trace && result ? (
-          <Timeline trace={trace} series={outcome?.series ?? []} lineCount={lineCount} totalOutput={result.stdout.length} step={step} onSeek={seek} valueText={valueText} />
+      {compileMode ? (
+        comparison ? (
+          <CompareBars comparison={comparison} onClose={() => setComparison(null)} />
         ) : (
-          <div className="lane-empty">{busy ? "Running…" : "The timeline appears here after a run."}</div>
-        )}
-      </footer>
+          <Ledger outcome={compiled} stale={compiledStale} busy={busy} onCompare={() => void compareRun()} />
+        )
+      ) : (
+        <footer className="tape" aria-label="Step through the run">
+          <div className="deck">
+            <button type="button" aria-label="Back to the start" onClick={() => seek(-1)} disabled={!trace}>
+              |◂
+            </button>
+            <button type="button" aria-label="Back one step" onClick={() => seek(Math.max(-1, step - 1))} disabled={!trace}>
+              ◂
+            </button>
+            <button type="button" className="play" onClick={() => setPlaying(!playing)} disabled={!trace}>
+              {playing ? "Pause" : "Play"}
+            </button>
+            <button type="button" aria-label="Forward one step" onClick={() => seek(Math.min(steps - 1, step + 1))} disabled={!trace}>
+              ▸
+            </button>
+            <label>
+              Speed
+              <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))} disabled={!trace}>
+                {SPEEDS.map((s, i) => (
+                  <option key={s.label} value={i}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="readout" aria-live="off">
+              {trace ? (
+                <>
+                  {step >= 0 ? count(step + 1) : "0"} / {count(steps)}
+                  {trace.truncated ? <small> · trace cut at {count(steps)} steps</small> : null}
+                </>
+              ) : (
+                "—"
+              )}
+            </div>
+          </div>
+          {trace && result ? (
+            <Timeline trace={trace} series={outcome?.series ?? []} lineCount={lineCount} totalOutput={result.stdout.length} step={step} onSeek={seek} valueText={valueText} />
+          ) : (
+            <div className="lane-empty">{busy ? "Running…" : "The timeline appears here after a run."}</div>
+          )}
+        </footer>
+      )}
     </div>
   );
 }
