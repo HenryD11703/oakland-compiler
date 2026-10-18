@@ -4,7 +4,7 @@
 
 Write a program, press Run, then drag through its execution: the line being run, every variable, the call stack, the output so far and the syntax tree, at any of up to 20,000 recorded steps. Everything runs in your browser; nothing is sent anywhere.
 
-**Live:** deployed on Vercel (the link goes here after the first deploy).
+**Live:** https://oakland-compiler.vercel.app/ (Vercel, from `main`).
 
 ![The playground midway through a run: source with values at the ends of lines, variables, output, and a timeline of the whole run](docs/images/playground.png)
 
