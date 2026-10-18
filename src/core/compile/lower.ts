@@ -30,6 +30,7 @@ import type {
 } from "../parser/ast";
 import type { Span } from "../span";
 import { INT_MAX, INT_MIN, typeNameOf } from "../types";
+import { DEFAULT_LIMITS } from "../interpreter/limits";
 import { HOST_IMPORTS, type FailSite, type HostName } from "./host";
 import { ARRAY_HEADER, HEAP, MAX_PAGES, MEMORY_RUNTIME_NAMES, memoryRuntime, type MemoryRuntimeName } from "./runtime";
 import { emptyModule, ir, type DataSegment, type Expr, type Func, type Global, type Import, type Local, type Module, type ValType } from "./ir";
@@ -70,6 +71,8 @@ const FIRST_ADDRESS = 8;
 /** An object or a struct is `[vtable base: i32][mark: i32][fields]`. The mark is set while it is being shown, to find cycles. */
 const OBJECT_HEADER = 8;
 const MARK = 4;
+/** The global that counts how many calls are open at the moment. */
+const DEPTH = "depth";
 const PAGE = 65536;
 
 const valType = (type: string): ValType => (type === "float" ? "f64" : "i32");
@@ -121,6 +124,7 @@ class Lowerer {
   private readonly structs = new Map<string, Layout>();
   private readonly classLayouts = new Map<string, ClassLayout>();
   private readonly table: string[] = [];
+  private usesTable = false;
   private readonly building = new Set<string>();
   private dataEnd = FIRST_ADDRESS;
   private counter = 0;
@@ -179,6 +183,11 @@ class Lowerer {
       name: `env:${name}`,
       signature: { params: HOST_IMPORTS[name].params as readonly ValType[], results: HOST_IMPORTS[name].results as readonly ValType[] },
     }));
+    // A call through the table needs a table even when no object was ever made (every such call then meets a null first).
+    if (this.usesTable && this.table.length === 0) {
+      this.table.push("rt:trap");
+      this.runtime.set("rt:trap", { name: "rt:trap", params: [], results: [], locals: [], body: [ir.unreachable()] });
+    }
     const pages = Math.max(1, Math.ceil(this.dataEnd / PAGE));
     // The first free address is right after the static data, rounded up to a multiple of 8.
     const heapStart = (this.dataEnd + 7) & ~7;
@@ -790,8 +799,15 @@ class Lowerer {
     const before = e.sizes.map((size, k) =>
       ir.set(sizes[k] as string, ir.call(this.runtimeFunction("check_size"), this.expression(size), ir.i32(this.site(size.span, "an array size cannot be negative ({0})")))),
     );
+    // The interpreter refuses an array of more than a million elements in all (checked after every size is known and not negative).
+    const limit = DEFAULT_LIMITS.maxArrayElements;
+    const total = sizes.slice(1).reduce<Expr>((product, name) => ir.op("f64.mul", product, ir.op("f64.convert_i32_s", ir.get(name))), ir.op("f64.convert_i32_s", ir.get(sizes[0] as string)));
+    const tooBig = ir.if(ir.op("f64.gt", total, ir.f64(limit)), [
+      ir.call(this.host("fail"), ir.i32(this.site(e.span, `the array is too large (limit: ${limit.toLocaleString("en-US")} elements)`)), ir.i32(0), ir.i32(0)),
+      ir.unreachable(),
+    ]);
     const site = this.site(e.span, "out of memory");
-    return ir.block(this.fresh("new"), [...before, this.arrayLevel(e, 0, sizes, site)], "i32");
+    return ir.block(this.fresh("new"), [...before, tooBig, this.arrayLevel(e, 0, sizes, site)], "i32");
   }
 
   private arrayLevel(e: NewArray, level: number, sizes: readonly string[], site: number): Expr {
@@ -1025,7 +1041,44 @@ class Lowerer {
     if (this.owner !== null && own !== null) return this.invoke(this.owner, own, ir.get("this"), e, false, false);
     const decl = this.checked.functions.get(name);
     if (decl === undefined) return this.builtin(e, name);
-    return ir.call(name, ...this.convertArgs(decl.params, e.args));
+    const returns = typeNameOfReturn(decl);
+    return this.guarded(ir.call(name, ...this.convertArgs(decl.params, e.args)), decl.params.map((param) => valType(paramType(param))), returns === "void" ? null : valType(returns), e.span);
+  }
+
+  /**
+   * A call that counts how deep the calls are nested, like the interpreter (400, then `stack overflow` at the call). The
+   * arguments are worked out first and wait in locals, so the count goes up just before the call and down just after it.
+   */
+  private guarded(call: Expr, types: readonly ValType[], result: ValType | null, span: Span): Expr {
+    if (!this.globals.some((g) => g.name === DEPTH)) this.globals.push({ name: DEPTH, type: "i32", mutable: true, init: 0 });
+    const before: Expr[] = [];
+    const keep = (value: Expr, type: ValType): Expr => {
+      if (value.kind === "const") return value;
+      const name = this.fresh("arg");
+      this.locals.push({ name, type });
+      before.push(ir.set(name, value));
+      return ir.get(name);
+    };
+    let inner: Expr;
+    if (call.kind === "call") {
+      inner = { ...call, args: call.args.map((arg, i) => keep(arg, types[i] as ValType)) };
+    } else if (call.kind === "call_indirect") {
+      const args = call.args.map((arg, i) => keep(arg, types[i] as ValType));
+      inner = { ...call, args, index: keep(call.index, "i32") };
+    } else {
+      return call;
+    }
+    const site = this.site(span, `stack overflow: more than ${DEFAULT_LIMITS.maxDepth} calls nested inside each other`);
+    const down = ir.setGlobal(DEPTH, ir.op("i32.sub", ir.getGlobal(DEPTH), ir.i32(1)));
+    const body: Expr[] = [
+      ...before,
+      ir.setGlobal(DEPTH, ir.op("i32.add", ir.getGlobal(DEPTH), ir.i32(1))),
+      ir.if(ir.op("i32.gt_s", ir.getGlobal(DEPTH), ir.i32(DEFAULT_LIMITS.maxDepth)), [ir.call(this.host("fail"), ir.i32(site), ir.i32(0), ir.i32(0)), ir.unreachable()]),
+    ];
+    if (result === null) return ir.block(this.fresh("nest"), [...body, inner, down]);
+    const value = this.fresh("result");
+    this.locals.push({ name: value, type: result });
+    return ir.block(this.fresh("nest"), [...body, ir.set(value, inner), down, ir.get(value)], result);
   }
 
   /** The functions every program can call (`parseInt`, `toUpperCase`…): same names, same mistakes as the interpreter's. */
@@ -1174,7 +1227,8 @@ class Lowerer {
       const arity = call?.args.length ?? 0;
       const parentCtor = cls.parent.ctors.find((c) => c.decl.params.length === arity)?.decl ?? null;
       const args = call === null || parentCtor === null ? [] : this.convertArgs(parentCtor.params, call.args);
-      body.push(ir.call(this.constructorName(cls.parent, arity), ir.get("this"), ...args));
+      const parentCall = ir.call(this.constructorName(cls.parent, arity), ir.get("this"), ...args);
+      body.push(this.guarded(parentCall, ["i32", ...(parentCtor?.params ?? []).map((param) => valType(paramType(param)))], null, call?.span ?? cls.decl.nameSpan));
     }
     // An initial value sees `this` and the names outside the class, not the parameters of the constructor.
     this.scopes = [this.topScope, fields];
@@ -1203,7 +1257,7 @@ class Lowerer {
       [
         ir.set(object, ir.call(this.runtimeFunction("alloc"), ir.i32(layout.size), ir.i32(this.site(e.span, "out of memory")))),
         ir.store("i32.store", ir.get(object), ir.i32(this.vtableBase(info.name))),
-        ir.call(this.constructorName(info, e.args.length), ir.get(object), ...args),
+        this.guarded(ir.call(this.constructorName(info, e.args.length), ir.get(object), ...args), ["i32", ...(ctor?.params ?? []).map((param) => valType(paramType(param)))], null, e.span),
         ir.get(object),
       ],
       "i32",
@@ -1264,13 +1318,15 @@ class Lowerer {
     const returns = typeNameOf(method.decl.returnType);
     let call: Expr;
     if (!direct && this.isOverridden(cls, method.name)) {
+      this.usesTable = true;
       const slot = this.classLayout(cls.name).slots.indexOf(method.name) + 1;
       const signature = { params: ["i32" as ValType, ...params.map((param) => valType(paramType(param)))], results: returns === "void" ? [] : [valType(returns)] };
       call = ir.callIndirect(signature, ir.op("i32.add", ir.load("i32.load", self), ir.i32(slot)), target, ...args);
     } else {
       call = ir.call(`${method.owner.name}.${method.name}`, target, ...args);
     }
-    return this.sequence(before, call, returns === "void" ? null : valType(returns));
+    const types = ["i32" as ValType, ...params.map((param) => valType(paramType(param)))];
+    return this.sequence(before, this.guarded(call, types, returns === "void" ? null : valType(returns), e.span), returns === "void" ? null : valType(returns));
   }
 
   private superMethod(e: Call, callee: Member): Expr {
@@ -1285,6 +1341,7 @@ class Lowerer {
 
   /** `rt:showobj`: an object of any class as text, by asking its own class (slot 0 of its vtable). */
   private showObject(): string {
+    this.usesTable = true;
     const name = "rt:showobj";
     if (this.runtime.has(name)) return name;
     this.runtime.set(name, {

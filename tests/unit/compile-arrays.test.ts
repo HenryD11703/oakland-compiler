@@ -88,10 +88,18 @@ describe("array mistakes end a compiled run with the interpreter's words and pla
     expectSameFailure(`int[][] m = new int[3][-1];`, "an array size cannot be negative (-1)");
   });
 
-  it("an array too large for the memory ends with out of memory", () => {
+  it("an array too large for the language ends the run as the interpreter does", () => {
     const ran = runCompiled(compile(`System.out.println("start");\nint[] a = new int[1000000000];\nSystem.out.println("not here");`));
     expect(ran.stdout).toBe("start\n");
-    expect(ran.diagnostics[0]?.message).toBe("out of memory");
+    expect(ran.diagnostics[0]?.message).toBe("the array is too large (limit: 1,000,000 elements)");
     expect(ran.diagnostics[0]?.span.start.line).toBe(2);
+  });
+
+  it("memory that is never given back ends with out of memory at 256 MiB", () => {
+    // Each array is 4 MB and nothing is freed: the sixty-fifth does not fit. (The interpreter has no such cap; spec S-20.)
+    const ran = runCompiled(compile(`System.out.println("start");\nfor (int i = 0; i < 100; i++) {\n  int[] a = new int[1000000];\n}\nSystem.out.println("not here");`));
+    expect(ran.stdout).toBe("start\n");
+    expect(ran.diagnostics[0]?.message).toBe("out of memory");
+    expect(ran.diagnostics[0]?.span.start.line).toBe(3);
   });
 });
