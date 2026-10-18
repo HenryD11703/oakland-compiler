@@ -1,30 +1,32 @@
 import { describe, expect, it } from "vitest";
-import { compile, runCompiled } from "../../src/core/compile/index";
-import { run } from "../../src/core/run";
+import { compile } from "../../src/core/compile/index";
 import { corpus } from "../helpers/corpus";
+import { compareModes, describe as show } from "../helpers/differential";
 
 /**
- * The equivalence claim (spec S-17) over every program the project owns: if the compiler accepts a program and neither
- * mode meets a runtime mistake, the two print the same text. A program the compiler does not accept yet is skipped
- * here; the count below only goes up as the compiler learns more.
+ * The equivalence claim (spec S-17, S-18) over every program the project owns: if the compiler accepts a program, the two
+ * modes print the same text and meet the same first mistake. A program the checker rejects is not compiled, so it is
+ * skipped here. A failure prints the program.
  */
 describe("the whole corpus, compiled and interpreted", () => {
   const programs = corpus();
+  let spent = 0; // milliseconds spent comparing, added up by the test below
   const compiled = programs.map((p) => ({ ...p, result: compile(p.source) })).filter((p) => p.result.ok);
 
-  it.each(compiled.map((p) => [p.name, p] as const))("%s prints the same text in both modes", (_name, program) => {
-    // The interpreter goes first: a program that never ends is stopped by its step limit, and a compiled run has none here.
-    // A program that prints the time of day cannot print the same text twice; it is compiled, but not compared.
-    if (/\btime\(\)/.test(program.source)) return;
-    const interpreted = run(program.source, { trace: false, limits: { maxSteps: 50_000_000, maxTimeMs: 20_000 } });
-    if (interpreted.stoppedEarly) return;
-    const ran = runCompiled(program.result);
-    if (ran.diagnostics.length > 0 || interpreted.diagnostics.some((d) => d.phase === "runtime")) return;
-    expect(ran.stdout).toBe(interpreted.stdout);
+  it.each(compiled.map((p) => [p.name, p] as const))("%s prints the same text in both modes", (name, program) => {
+    const started = performance.now();
+    const verdict = compareModes(program.source, program.result);
+    spent += performance.now() - started;
+    expect(verdict.problem, verdict.problem === null ? undefined : show(name, verdict.problem, program.source)).toBeNull();
+  });
+
+  it("comparing the whole corpus takes under 30 seconds (T52)", () => {
+    expect(spent).toBeLessThan(30_000);
   });
 
   it("the compiler accepts at least as many corpus programs as it did at the last milestone", () => {
-    // T49: numbers, control flow, functions, strings, arrays, structs, classes, the built-in functions and functions inside functions. Raise this number when a task makes more programs compile.
+    // Everything the checker accepts compiles (Phase C): numbers, control flow, functions, strings, arrays, structs, classes,
+    // the built-in functions and functions inside functions. This number only goes up as programs are added to the corpus.
     expect(compiled.length).toBeGreaterThanOrEqual(45);
   });
 });

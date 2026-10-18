@@ -35,8 +35,8 @@
 - ✅ **T51 `compile()` and the guarantees.** The entry point; never throws; limits. *Done when:* the fuzz test over mutated programs passes (no throw, and `WebAssembly.validate` on every module returned for a clean program). Covers: S-16, S-20.
 
 ## Phase D — Verification (3 sessions)
-- **T52 The differential harness in CI.** All corpus programs, both modes, stdout compared; failures print the program. *Done when:* it runs in `npm run check` in under 30 s. Covers: S-17.
-- **T53 The program generator.** Seeded, well-typed, with overflow, mixed numeric types, strings, loops, functions, arrays, classes with overrides; a minimiser for failures. *Done when:* 200 seeds pass, and a deliberately broken compiler (a mutation) is caught within the 200. Covers: S-17.
+- ✅ **T52 The differential harness in CI.** All corpus programs, both modes, stdout compared; failures print the program. *Done when:* it runs in `npm run check` in under 30 s. Covers: S-17.
+- ✅ **T53 The program generator.** Seeded, well-typed, with overflow, mixed numeric types, strings, loops, functions, arrays, classes with overrides; a minimiser for failures. *Done when:* 200 seeds pass, and a deliberately broken compiler (a mutation) is caught within the 200. Covers: S-17.
 - **T54 Benchmarks and numbers.** The final `npm run bench` table, in Node and in a browser, labelled. *Done when:* the numbers are in the README with the machine named, whatever they are. Covers: S-22.
 
 ## Phase E — The product (4 sessions)
