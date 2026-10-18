@@ -55,7 +55,7 @@ const functions: { name: string; origin: string; lines: string[] }[] = [];
 const head: string[] = [];
 let current: { name: string; origin: string; lines: string[] } | null = null;
 for (const line of watLines) {
-  const start = /^  \(func \$([^ )]+)/.exec(line);
+  const start = /^ {2}\(func \$([^ )]+)/.exec(line);
   if (start) {
     const name = start[1]!;
     current = { name, origin: name.startsWith("rt:") ? "runtime" : "yours", lines: [line] };

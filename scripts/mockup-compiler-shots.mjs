@@ -1,3 +1,4 @@
+/* global document */
 // Takes the screenshots of the Compile-mode mockups (task T55) into docs/design/compiler/images/.
 //   node scripts/mockup-compiler-shots.mjs [a|b|c]
 import { chromium } from "@playwright/test";
