@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — Compile mode, direction A: the same room (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+/* A keeps the page as it is. The mode is a switch next to Run; in Compile mode the side column swaps "Now" and
+   "Variables" for the numbers of the module, the views get a Compiled tab, and the tape says why it is not there. */
+.sheet { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 7fr) minmax(340px, 5fr); }
+.sheet > .code { border-right: 1px solid var(--edge); }
+.side { min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.block { padding: 12px 24px; border-bottom: 1px solid var(--rule); }
+.numbers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.numbers .big { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.numbers .big small { font-size: 13px; font-weight: 400; color: var(--dim); letter-spacing: 0; }
+.views { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.views .pane { padding-top: 12px; overflow: auto; flex: 1; min-height: 0; }
+.fn { border-bottom: 1px solid var(--rule); }
+.fn > button { display: flex; width: 100%; align-items: baseline; gap: 8px; padding: 7px 0; text-align: left; }
+.fn .name { font: 600 13px/1.7 var(--mono); }
+.fn .count { margin-left: auto; font: 12px var(--mono); color: var(--dim); }
+.fn .body { padding: 2px 0 10px 16px; overflow: auto; }
+.fn .jump { font-size: 12.5px; color: var(--mark); border-bottom: 1px dotted var(--mark); margin-left: 4px; }
+.ln.on .tx { border-left-color: var(--mark); background: var(--mark-wash); }
+.tape { flex: none; border-top: 1px solid var(--edge); padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+.tape p { margin: 0; color: var(--dim); }
+.tape .compare { margin-left: auto; border: 1px solid var(--ink); padding: 6px 16px; font-weight: 600; white-space: nowrap; }
+.mtabs { display: none; }
+
+/* Compare: a whole view, like the four whole views of the page */
+.whole { flex: 1; min-height: 0; padding: 12px 24px 24px; display: flex; flex-direction: column; gap: 20px; overflow: auto; }
+.whole .bar { display: flex; justify-content: space-between; align-items: baseline; }
+.whole .bar button { border: 1px solid var(--edge); padding: 2px 10px; font-size: 12.5px; }
+.versus { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--edge); }
+.versus > div { padding: 18px 24px; }
+.versus > div + div { border-left: 1px solid var(--edge); }
+.versus .time { font-size: 44px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; margin: 6px 0 4px; }
+.versus .time small { font-size: 18px; font-weight: 400; color: var(--dim); }
+.ratio { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.ratio .x { font-size: 56px; font-weight: 700; letter-spacing: -0.04em; color: var(--mark); line-height: 1; }
+pre.out { margin: 0; font: 14px/1.4 var(--mono); }
+
+@media (max-width: 760px) {
+  .top { flex-wrap: wrap; padding: 8px 16px; gap: 12px; }
+  .brand { font-size: 19px; }
+  .menu { order: 3; width: 100%; margin: 0; flex-wrap: wrap; row-gap: 8px; }
+  .actions .stop { display: none; }
+  .mtabs { display: flex; border-bottom: 1px solid var(--edge); flex: none; }
+  .mtabs button { flex: 1; padding: 10px 0; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; }
+  .mtabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--mark); }
+  .sheet { display: block; overflow: auto; }
+  .sheet > .code { border-right: 0; }
+  .block, .tape { padding-left: 16px; padding-right: 16px; }
+  .tape { flex-wrap: wrap; }
+  .whole { padding: 12px 16px 24px; }
+  .versus { grid-template-columns: 1fr; }
+  .versus > div + div { border-left: 0; border-top: 1px solid var(--edge); }
+  .ratio .x { font-size: 44px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">Oak<span>Land</span></h1>
+  <nav class="menu" aria-label="Program">
+    <button class="link-button">Examples ▾</button>
+    <div class="seg" role="group" aria-label="Mode"><button aria-pressed="false">Interpret</button><button aria-pressed="true">Compile</button></div>
+    <span class="file">Sieve of Eratosthenes (bench)</span>
+  </nav>
+  <div class="actions"><button class="stop">Stop</button><button class="run">Compile ▸</button></div>
+</header>
+<div class="mtabs" role="tablist" aria-label="Panel"><button role="tab" aria-selected="true" data-m="code">Code</button><button role="tab" aria-selected="false" data-m="state">Module</button><button role="tab" aria-selected="false" data-m="views">Views</button></div>
+
+<main class="sheet" id="sheet">
+  <section class="code" id="code" aria-label="Source"></section>
+  <aside class="side" id="side">
+    <section class="block" id="numbers" aria-label="The module"></section>
+    <section class="block views" style="border-bottom:0" id="views" aria-label="Views">
+      <div role="tablist" aria-label="Views" id="tabs">
+        <button role="tab" aria-selected="false">Output</button>
+        <button role="tab" aria-selected="false">Problems</button>
+        <button role="tab" aria-selected="true">Compiled</button>
+        <button role="tab" aria-selected="false">Syntax tree</button>
+        <button role="tab" aria-selected="false">Symbols</button>
+      </div>
+      <div class="pane" id="pane"></div>
+    </section>
+  </aside>
+</main>
+<section class="whole hidden" id="whole" aria-label="Compare"></section>
+<footer class="tape" id="tape">
+  <p><b style="color:var(--ink)">No timeline in Compile mode.</b> A compiled program runs to the end without recording its steps. Switch to Interpret to step through it.</p>
+  <button class="compare" id="open-compare">Compare ⇄</button>
+</footer>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { CC, int, ms, sourceHtml, watHtml, onState, stateSwitch, esc } = M;
+const t = CC.times;
+document.getElementById("code").innerHTML = sourceHtml();
+document.getElementById("numbers").innerHTML = `
+  <div class="label" style="margin-bottom:8px">The module</div>
+  <div class="numbers">
+    <div><div class="big">${int(CC.module.bytes)} <small>bytes</small></div><div class="note">${CC.module.functions.length} functions</div></div>
+    <div><div class="big">${ms(t.compileMs).replace(" ms", "")} <small>ms</small></div><div class="note">to compile</div></div>
+    <div><div class="big">${ms(t.compiledMs).replace(" ms", "")} <small>ms</small></div><div class="note">to run</div></div>
+  </div>`;
+let open = "main";
+function renderPane() {
+  const rows = CC.module.functions.map((f) => {
+    const isOpen = f.name === open;
+    const jump = f.origin === "yours" ? `<span class="jump">lines 1–${CC.program.lines.length} ↗</span>` : "";
+    return `<div class="fn"><button data-fn="${esc(f.name)}" aria-expanded="${isOpen}"><span class="fold">${isOpen ? "▾" : "▸"}</span><span class="name">$${esc(f.name)}</span><span class="chip ${f.origin}">${f.origin === "yours" ? "your code" : "runtime"}</span>${jump}<span class="count">${f.lines.length} lines</span></button>${isOpen ? `<div class="body">${watHtml(f.lines, 22)}</div>` : ""}</div>`;
+  });
+  document.getElementById("pane").innerHTML = rows.join("");
+  document.querySelectorAll("[data-fn]").forEach((b) => b.addEventListener("click", () => { open = open === b.dataset.fn ? "" : b.dataset.fn; renderPane(); }));
+}
+renderPane();
+
+function renderCompare() {
+  document.getElementById("whole").innerHTML = `
+    <div class="bar"><span class="label">Compare</span><button>Close ✕</button></div>
+    <div class="ratio"><span class="x">${t.ratio}×</span><span><b>faster compiled</b> <span class="dim">· one run of each, on this page</span></span><span class="same">✓ the outputs are identical</span></div>
+    <div class="versus">
+      <div><div class="label">Interpret</div><div class="time">${int(t.interpretedMs)} <small>ms</small></div><div class="note">no trace · the same program</div></div>
+      <div><div class="label">Compile</div><div class="time">${ms(t.compiledMs).replace(" ms", "")} <small>ms</small></div><div class="note">+ ${ms(t.compileMs)} to compile · ${int(CC.module.bytes)} bytes</div></div>
+    </div>
+    <div><div class="label" style="margin-bottom:6px">Output (both)</div><pre class="out">${esc(CC.stdout.trim())}</pre></div>`;
+}
+renderCompare();
+onState((s) => {
+  const compare = s === "compare";
+  document.getElementById("whole").classList.toggle("hidden", !compare);
+  document.getElementById("sheet").classList.toggle("hidden", compare);
+  document.getElementById("tape").classList.toggle("hidden", compare);
+  document.querySelectorAll(".seg button").forEach((b, i) => b.setAttribute("aria-pressed", String(compare ? false : i === 1)));
+});
+document.getElementById("open-compare").addEventListener("click", () => (location.hash = "compare"));
+document.querySelector("#whole .bar button").addEventListener("click", () => (location.hash = "compile"));
+// the phone: three panels
+const panels = { code: "code", state: "numbers", views: "views" };
+document.querySelectorAll(".mtabs [data-m]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".mtabs [data-m]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  if (matchMedia("(max-width: 760px)").matches) for (const [k, id] of Object.entries(panels)) document.getElementById(id).classList.toggle("hidden", k !== b.dataset.m);
+}));
+if (matchMedia("(max-width: 760px)").matches) { document.getElementById("code").classList.add("hidden"); document.getElementById("numbers").classList.add("hidden"); document.querySelectorAll(".mtabs [data-m]").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.m === "views"))); }
+stateSwitch();
+</script>
+</body>
+</html>

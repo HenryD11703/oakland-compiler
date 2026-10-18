@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — Compile mode: three mockups</title>
+<link rel="stylesheet" href="base.css">
+<style>
+main { max-width: 760px; margin: 0 auto; padding: 24px 24px 64px; }
+h1 { font-size: 26px; letter-spacing: -0.03em; margin: 0 0 6px; }
+.row { display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: baseline; }
+.row h2 { margin: 0; font-size: 17px; }
+.row a { color: var(--mark); margin-right: 14px; }
+p { color: var(--dim); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Compile mode: three mockups</h1>
+  <p>Real data: the sieve, compiled by the real compiler. Each page has two states, <b>#compile</b> and <b>#compare</b>, and works at 1280 px and at 375 px.</p>
+  <div class="row"><div><h2>A. The same room</h2><p>The page as it is; a mode switch, a Compiled tab, Compare as a whole view.</p></div><div><a href="a-same-room.html#compile">Compile</a><a href="a-same-room.html#compare">Compare</a></div></div>
+  <div class="row"><div><h2>B. Source beside its WebAssembly</h2><p>Two columns that read together; a ledger instead of the tape; Compare as bars.</p></div><div><a href="b-side-by-side.html#compile">Compile</a><a href="b-side-by-side.html#compare">Compare</a></div></div>
+  <div class="row"><div><h2>C. The ledger</h2><p>Three modes as three words; a ledger of functions; a log-scale chart.</p></div><div><a href="c-ledger.html#compile">Compile</a><a href="c-ledger.html#compare">Compare</a></div></div>
+  <p style="margin-top:20px">The comparison and a recommendation: <code>00-directions.md</code>.</p>
+</main>
+</body>
+</html>

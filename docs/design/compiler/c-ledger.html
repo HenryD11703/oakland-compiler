@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — Compile mode, direction C: the ledger (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+/* C is about the numbers. The mode is a row of three words (Interpret, Compile, Compare) instead of a switch; Compare is
+   a third mode that runs both and keeps both visible. The side column is a ledger of the module's functions, each with its
+   share of the module; one opens at a time. The tape's place is taken by large figures, and by a to-scale chart in Compare. */
+.modes { display: flex; gap: 22px; margin-left: 8px; }
+.modes button { padding: 4px 0 6px; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; }
+.modes button[aria-pressed="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--mark); }
+.sheet { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 6fr) minmax(360px, 6fr); }
+.sheet > .code { border-right: 1px solid var(--edge); }
+.side { overflow: auto; min-height: 0; padding: 12px 24px 16px; }
+.ledger-table { table-layout: fixed; }
+.ledger-table td { padding: 8px 8px 8px 0; }
+.ledger-table th:nth-child(1) { width: 38%; } .ledger-table th:nth-child(2) { width: 17%; } .ledger-table th:nth-child(3) { width: 12%; }
+.ledger-table .fname { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.ledger-table tr.sel td { background: var(--mark-wash); }
+.ledger-table .fname { font: 600 13px/1.6 var(--mono); }
+.share { display: inline-block; height: 8px; background: var(--ink); vertical-align: middle; }
+.share.rt { background: var(--edge); }
+.ledger-table button { text-align: left; }
+.opened { border-bottom: 1px solid var(--rule); padding: 4px 0 12px; overflow: auto; max-width: 100%; }
+.ln.on .tx { border-left-color: var(--mark); background: var(--mark-wash); }
+.figures { flex: none; border-top: 1px solid var(--edge); display: grid; grid-template-columns: repeat(4, 1fr); }
+.figures > div { padding: 12px 24px 14px; border-right: 1px solid var(--rule); }
+.figures > div:last-child { border-right: 0; }
+.figures .huge { font-size: 38px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; margin-top: 4px; }
+.figures .huge small { font-size: 14px; font-weight: 500; letter-spacing: 0; color: var(--dim); margin-left: 4px; }
+.chart { flex: none; border-top: 1px solid var(--edge); padding: 14px 24px 12px; display: flex; gap: 24px; align-items: center; }
+.chart .rows { flex: 1; min-width: 0; display: grid; grid-template-columns: 84px minmax(0, 1fr) 96px; gap: 8px 14px; align-items: center; }
+.chart .track { position: relative; height: 18px; background-image: repeating-linear-gradient(to right, var(--rule) 0, var(--rule) 1px, transparent 1px, transparent 20%); border-left: 1px solid var(--rule); }
+.chart .fill { position: absolute; inset: 4px auto 4px 0; background: var(--ink); }
+.chart .fill.fast { background: var(--mark); }
+.chart .val { font: 600 15px var(--mono); text-align: right; }
+.chart .axis { grid-column: 2; display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--dim); }
+.chart .huge { font-size: 64px; font-weight: 700; letter-spacing: -0.05em; color: var(--mark); line-height: 1; text-align: right; flex: none; }
+.chart .foot { grid-column: 1 / -1; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+.both { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid var(--edge); margin-bottom: 14px; }
+.both > div { padding: 12px 16px; }
+.both > div + div { border-left: 1px solid var(--edge); }
+pre.out { margin: 6px 0 0; font: 14px/1.4 var(--mono); }
+.mtabs { display: none; }
+@media (max-width: 760px) {
+  .top { flex-wrap: wrap; padding: 8px 16px; gap: 10px 16px; }
+  .brand { font-size: 19px; }
+  .modes { order: 3; width: 100%; margin: 0; justify-content: space-between; }
+  .actions .stop { display: none; }
+  .menu { margin-left: 0; }
+  .mtabs { display: flex; border-bottom: 1px solid var(--edge); flex: none; }
+  .mtabs button { flex: 1; padding: 10px 0; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; }
+  .mtabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--mark); }
+  .sheet { display: block; overflow: auto; }
+  .sheet > .code { border-right: 0; }
+  .side { padding: 12px 16px; }
+  .figures { grid-template-columns: 1fr 1fr; }
+  .figures > div { padding: 8px 16px 10px; border-bottom: 1px solid var(--rule); }
+  .figures .huge { font-size: 28px; }
+  .chart { flex-direction: column; align-items: stretch; padding: 12px 16px; gap: 6px; }
+  .chart .rows { grid-template-columns: 64px minmax(0, 1fr) 76px; gap: 8px; }
+  .chart .huge { text-align: left; font-size: 44px; }
+  .chart .axis span:nth-child(even) { display: none; }
+  .both { grid-template-columns: 1fr; }
+  .both > div + div { border-left: 0; border-top: 1px solid var(--edge); }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">Oak<span>Land</span></h1>
+  <nav class="menu" aria-label="Program"><button class="link-button">Examples ▾</button><span class="file">Sieve of Eratosthenes (bench)</span></nav>
+  <div class="modes" role="group" aria-label="Mode" id="modes">
+    <button data-mode="interpret" aria-pressed="false">Interpret</button>
+    <button data-mode="compile" aria-pressed="true">Compile</button>
+    <button data-mode="compare" aria-pressed="false">Compare</button>
+  </div>
+  <div class="actions"><button class="stop">Stop</button><button class="run" id="run">Compile ▸</button></div>
+</header>
+<div class="mtabs" role="tablist" aria-label="Panel"><button role="tab" aria-selected="true" data-m="code">Code</button><button role="tab" aria-selected="false" data-m="side">Ledger</button></div>
+
+<main class="sheet" id="sheet">
+  <section class="code" id="code" aria-label="Source"></section>
+  <aside class="side" id="side" aria-label="Compiled"></aside>
+</main>
+<footer id="foot"></footer>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { CC, int, ms, sourceHtml, watHtml, onState, stateSwitch, esc } = M;
+const t = CC.times;
+const total = CC.module.functions.reduce((s, f) => s + f.lines.length, 0);
+let open = "main";
+let state = "compile";
+function renderCode() { document.getElementById("code").innerHTML = sourceHtml(1, CC.program.lines.length, open === "main" ? [1, CC.program.lines.length] : null); }
+function renderSide() {
+  const side = document.getElementById("side");
+  if (state === "compare") {
+    side.innerHTML = `<div class="label" style="margin-bottom:8px">Output of each mode</div>
+      <div class="both"><div><div class="label">Interpret</div><pre class="out">${esc(CC.stdout.trim())}</pre></div><div><div class="label">Compile</div><pre class="out">${esc(CC.stdout.trim())}</pre></div></div>
+      <p class="same" style="margin:0 0 6px">✓ identical, byte for byte</p><p class="note" style="margin:0">Both ran once, on this page, with the same program. Interpret ran without the trace.</p>`;
+    return;
+  }
+  const rows = CC.module.functions.map((f) => {
+    const sel = f.name === open;
+    return `<tr class="${sel ? "sel" : ""}"><td><button data-fn="${esc(f.name)}" class="fname">${sel ? "▾" : "▸"} $${esc(f.name)}</button></td><td><span class="chip ${f.origin}">${f.origin === "yours" ? "yours" : "runtime"}</span></td><td class="num">${f.lines.length}</td><td style="width:34%"><span class="share ${f.origin === "yours" ? "" : "rt"}" style="width:${Math.round((f.lines.length / total) * 100)}%"></span> <span class="note mono">${Math.round((f.lines.length / total) * 100)}%</span></td></tr>${sel ? `<tr><td colspan="4" style="padding:0"><div class="opened">${watHtml(f.lines, 24)}</div></td></tr>` : ""}`;
+  }).join("");
+  side.innerHTML = `<div class="label" style="margin-bottom:8px">Compiled · ${CC.module.functions.length} functions · ${CC.module.watLines} lines of WebAssembly</div>
+    <table class="ledger-table"><thead><tr><th>Function</th><th>From</th><th class="num">Lines</th><th>Share of the module</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="note" style="margin:10px 0 0">A function of yours points at its source: the lines it came from are marked on the left. The runtime is what every module carries: memory, strings, arrays.</p>`;
+  side.querySelectorAll("[data-fn]").forEach((b) => b.addEventListener("click", () => { open = open === b.dataset.fn ? "" : b.dataset.fn; renderSide(); renderCode(); }));
+}
+function renderFoot() {
+  const foot = document.getElementById("foot");
+  if (state === "compare") {
+    const scale = (v) => Math.max(1, (Math.log10(Math.max(v, 0.1)) + 1) / 5 * 100); // 0.1 ms .. 10 s
+    foot.innerHTML = `<div class="chart"><div class="rows">
+      <span class="label">Interpret</span><span class="track"><span class="fill" style="width:${scale(t.interpretedMs)}%"></span></span><span class="val">${int(t.interpretedMs)} ms</span>
+      <span class="label">Compile</span><span class="track"><span class="fill fast" style="width:${scale(t.compiledMs)}%"></span></span><span class="val">${ms(t.compiledMs)}</span>
+      <span></span><span class="axis"><span>0.1 ms</span><span>1 ms</span><span>10 ms</span><span>100 ms</span><span>1 s</span><span>10 s</span></span><span></span>
+      <div class="foot"><span class="note">Scale: each step is ten times more.</span><span class="same">✓ the outputs are identical</span><span class="note">${CC.machine}</span></div></div><div class="huge">${t.ratio}×</div></div>`;
+    return;
+  }
+  foot.innerHTML = `<div class="figures">
+    <div><div class="label">Module</div><div class="huge">${int(CC.module.bytes)}<small>bytes</small></div></div>
+    <div><div class="label">Compile</div><div class="huge">${ms(t.compileMs).replace(" ms", "")}<small>ms</small></div></div>
+    <div><div class="label">Run</div><div class="huge">${ms(t.compiledMs).replace(" ms", "")}<small>ms</small></div></div>
+    <div><div class="label">Timeline</div><div class="note" style="margin-top:6px">Not in Compile mode: no steps are recorded.</div></div></div>`;
+}
+function render() {
+  document.querySelectorAll("#modes [data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state)));
+  document.getElementById("run").textContent = state === "compare" ? "Run both ▸" : "Compile ▸";
+  renderCode(); renderSide(); renderFoot();
+}
+document.querySelectorAll("#modes [data-mode]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.mode !== "interpret") location.hash = b.dataset.mode; }));
+onState((s) => { state = s; render(); });
+const phone = matchMedia("(max-width: 760px)");
+document.querySelectorAll(".mtabs [data-m]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".mtabs [data-m]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  if (phone.matches) { document.getElementById("code").classList.toggle("hidden", b.dataset.m !== "code"); document.getElementById("side").classList.toggle("hidden", b.dataset.m !== "side"); }
+}));
+if (phone.matches) { document.getElementById("code").classList.add("hidden"); document.querySelectorAll(".mtabs [data-m]").forEach((x) => x.setAttribute("aria-selected", String(x.dataset.m === "side"))); }
+stateSwitch();
+</script>
+</body>
+</html>

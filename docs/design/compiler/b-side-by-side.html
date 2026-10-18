@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OakLand — Compile mode, direction B: source beside its WebAssembly (mockup)</title>
+<link rel="stylesheet" href="base.css">
+<style>
+/* B makes the compiled text the star. In Compile mode the page is two columns that read together: your source, and the
+   WebAssembly it became. A function is marked in the source's margin and in the WAT, and each points at the other.
+   Output and problems fold into one line under the columns; the numbers sit in a ledger where the tape was. */
+.pair { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+.pair > section { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.pair > section + section { border-left: 1px solid var(--edge); }
+.head { display: flex; align-items: baseline; gap: 10px; padding: 8px 24px; border-bottom: 1px solid var(--rule); flex: none; }
+.head .grow { margin-left: auto; }
+.head button { border: 1px solid var(--edge); padding: 1px 8px; font-size: 12px; }
+.scroll { overflow: auto; flex: 1; min-height: 0; }
+.ln .no { position: relative; }
+.ln.fn-range .tx { border-left-color: var(--mark); }
+.ln.fn-first .tx::after { content: "  → $main"; color: var(--mark); font-style: italic; }
+.wat-body { padding: 8px 24px 20px; }
+.fnhead { display: flex; align-items: baseline; gap: 8px; padding: 8px 0 4px; font: 600 13px var(--mono); position: sticky; top: 0; background: var(--paper); border-bottom: 1px solid var(--rule); }
+.fnhead .back { font: 12px var(--ui); color: var(--mark); border-bottom: 1px dotted var(--mark); }
+.fnhead .count { margin-left: auto; font: 12px var(--mono); color: var(--dim); font-weight: 400; }
+.others { padding: 10px 24px 16px; border-top: 1px solid var(--rule); }
+.others button { display: flex; gap: 8px; align-items: baseline; width: 100%; padding: 4px 0; text-align: left; border-bottom: 1px solid var(--rule); }
+.others .count { margin-left: auto; font: 12px var(--mono); color: var(--dim); }
+.under { flex: none; border-top: 1px solid var(--edge); padding: 6px 24px; display: flex; gap: 20px; align-items: baseline; font: 13px var(--mono); }
+.under .k { color: var(--dim); font: 600 11px var(--ui); letter-spacing: 0.09em; text-transform: uppercase; margin-right: 6px; }
+.ledger { flex: none; border-top: 1px solid var(--edge); display: grid; grid-template-columns: repeat(4, auto) 1fr; align-items: center; gap: 36px; padding: 12px 24px; }
+.ledger .big { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.ledger .big small { font-size: 12.5px; color: var(--dim); font-weight: 400; letter-spacing: 0; }
+.ledger .compare { justify-self: end; border: 1px solid var(--ink); padding: 6px 16px; font-weight: 600; white-space: nowrap; }
+.bars { flex: none; border-top: 1px solid var(--edge); padding: 14px 24px 16px; display: grid; grid-template-columns: 96px 1fr 110px; gap: 8px 14px; align-items: center; }
+.bars .track { height: 14px; background: var(--rule); position: relative; }
+.bars .fill { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
+.bars .fill.fast { background: var(--mark); }
+.bars .val { font: 600 14px var(--mono); text-align: right; }
+.bars .foot { grid-column: 1 / -1; display: flex; gap: 20px; align-items: baseline; flex-wrap: wrap; }
+.bars .x { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; color: var(--mark); line-height: 1; }
+.mtabs { display: none; }
+@media (max-width: 760px) {
+  .top { flex-wrap: wrap; padding: 8px 16px; gap: 12px; }
+  .brand { font-size: 19px; }
+  .menu { order: 3; width: 100%; margin: 0; flex-wrap: wrap; row-gap: 8px; }
+  .actions .stop { display: none; }
+  .mtabs { display: flex; border-bottom: 1px solid var(--edge); flex: none; }
+  .mtabs button { flex: 1; padding: 10px 0; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; }
+  .mtabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--mark); }
+  .pair { display: block; overflow: auto; }
+  .pair > section + section { border-left: 0; }
+  .head { padding: 8px 16px; }
+  .wat-body, .others { padding-left: 16px; padding-right: 16px; }
+  .under { padding: 6px 16px; flex-wrap: wrap; gap: 6px 16px; }
+  .ledger { grid-template-columns: repeat(2, 1fr); gap: 10px 16px; padding: 10px 16px; }
+  .ledger .compare { grid-column: 1 / -1; justify-self: stretch; text-align: center; }
+  .bars { grid-template-columns: 74px 1fr 84px; padding: 12px 16px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">Oak<span>Land</span></h1>
+  <nav class="menu" aria-label="Program">
+    <button class="link-button">Examples ▾</button>
+    <div class="seg" role="group" aria-label="Mode"><button aria-pressed="false">Interpret</button><button aria-pressed="true">Compile</button></div>
+    <span class="file">Sieve of Eratosthenes (bench)</span>
+  </nav>
+  <div class="actions"><button class="stop">Stop</button><button class="run">Compile ▸</button></div>
+</header>
+<div class="mtabs" role="tablist" aria-label="Panel"><button role="tab" aria-selected="true" data-m="src">Source</button><button role="tab" aria-selected="false" data-m="wat">WebAssembly</button></div>
+
+<main class="pair" id="pair">
+  <section id="srcCol" aria-label="Source">
+    <div class="head"><span class="label">Source</span><span class="note">13 lines</span></div>
+    <div class="scroll code" id="code"></div>
+  </section>
+  <section id="watCol" aria-label="WebAssembly">
+    <div class="head"><span class="label">WebAssembly</span><span class="note" id="watNote"></span><span class="grow"><button id="foldAll">Fold all</button></span></div>
+    <div class="scroll" id="wat"></div>
+    <div class="others" id="others"></div>
+  </section>
+</main>
+<div class="under" id="under"></div>
+<div class="bars hidden" id="bars"></div>
+<footer class="ledger" id="ledger"></footer>
+
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+const { CC, int, ms, sourceHtml, watHtml, onState, stateSwitch, esc } = M;
+const t = CC.times;
+const main = CC.module.functions[0];
+let showMain = true;
+document.getElementById("code").innerHTML = sourceHtml().replace(/<div class="ln">/g, '<div class="ln fn-range">').replace('<div class="ln fn-range">', '<div class="ln fn-range fn-first">');
+document.getElementById("watNote").textContent = `${CC.module.watLines} lines · ${CC.module.functions.length} functions`;
+function renderWat() {
+  document.getElementById("wat").innerHTML = showMain
+    ? `<div class="wat-body"><div class="fnhead">$main <span class="chip yours">your code</span><a class="back" href="#">← source lines 1–${CC.program.lines.length}</a><span class="count">${main.lines.length} lines</span></div>${watHtml(main.lines)}</div>`
+    : `<div class="wat-body"><p class="note">Every function is folded. Pick one below.</p></div>`;
+  document.getElementById("others").innerHTML = `<div class="label" style="margin-bottom:4px">Also in the module: the runtime it carries</div>` + CC.module.functions.slice(1).map((f) => `<button><span class="fold">▸</span><span class="mono">$${esc(f.name)}</span><span class="chip">runtime</span><span class="count">${f.lines.length} lines</span></button>`).join("");
+}
+renderWat();
+document.getElementById("foldAll").addEventListener("click", () => { showMain = !showMain; renderWat(); document.getElementById("foldAll").textContent = showMain ? "Fold all" : "Unfold"; });
+document.getElementById("under").innerHTML = `<span><span class="k">Output</span>${esc(CC.stdout.trim())}</span><span class="dim">1 line</span><span><span class="k">Problems</span>none</span><button style="margin-left:auto;border-bottom:1px dotted var(--dim)" class="dim">Open output ▴</button>`;
+document.getElementById("ledger").innerHTML = `
+  <div><div class="label">Module</div><div class="big">${int(CC.module.bytes)} <small>bytes</small></div></div>
+  <div><div class="label">Compile</div><div class="big">${ms(t.compileMs).replace(" ms", "")} <small>ms</small></div></div>
+  <div><div class="label">Run</div><div class="big">${ms(t.compiledMs).replace(" ms", "")} <small>ms</small></div></div>
+  <div><div class="label">Timeline</div><div class="note" style="max-width:260px">Not in Compile mode: no steps are recorded.</div></div>
+  <button class="compare" id="open-compare">Compare ⇄</button>`;
+const bar = (label, value, cls, shown) => `<span class="label">${label}</span><span class="track"><span class="fill ${cls}" style="width:${shown}%"></span></span><span class="val">${value}</span>`;
+document.getElementById("bars").innerHTML = bar("Interpret", `${int(t.interpretedMs)} ms`, "", 100) + bar("Compile", ms(t.compiledMs), "fast", Math.max(0.8, (t.compiledMs / t.interpretedMs) * 100)) +
+  `<div class="foot"><span class="x">${t.ratio}×</span><b>faster compiled</b><span class="same">✓ the outputs are identical</span><span class="note">one run of each · the bars are to scale</span><button style="margin-left:auto;border:1px solid var(--edge);padding:2px 10px;font-size:12.5px" id="close-compare">Close ✕</button></div>`;
+onState((s) => {
+  const c = s === "compare";
+  document.getElementById("bars").classList.toggle("hidden", !c);
+  document.getElementById("ledger").classList.toggle("hidden", c);
+  document.getElementById("under").classList.toggle("hidden", c);
+});
+document.getElementById("open-compare").addEventListener("click", () => (location.hash = "compare"));
+document.getElementById("close-compare").addEventListener("click", () => (location.hash = "compile"));
+const phone = matchMedia("(max-width: 760px)");
+document.querySelectorAll(".mtabs [data-m]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".mtabs [data-m]").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+  if (phone.matches) { document.getElementById("srcCol").classList.toggle("hidden", b.dataset.m !== "src"); document.getElementById("watCol").classList.toggle("hidden", b.dataset.m !== "wat"); }
+}));
+if (phone.matches) { document.getElementById("watCol").classList.add("hidden"); }
+stateSwitch();
+</script>
+</body>
+</html>
