@@ -112,7 +112,10 @@ tr.frame td { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase
 .views { flex: 1; min-height: 160px; display: flex; flex-direction: column; border-bottom: 0; }
 /* The panel that is showing scrolls, both ways, inside the space the views have. */
 .views > [role="tabpanel"]:not([hidden]) { flex: 1; min-height: 0; overflow: auto; }
-[role="tablist"].tabs { display: flex; gap: 18px; margin-bottom: 12px; border-bottom: 1px solid var(--edge); flex-wrap: wrap; flex: none; }
+[role="tablist"].tabs { display: flex; gap: 18px; flex-wrap: wrap; }
+.tabrow { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--edge); flex: none; }
+.expand { background: none; border: 1px solid var(--edge); padding: 2px 10px; font-size: 12.5px; font-weight: 500; white-space: nowrap; margin-top: -2px; }
+.expand:hover { border-color: var(--ink); }
 [role="tab"] { background: none; border: 0; padding: 4px 0 8px; font-weight: 500; color: var(--dim); border-bottom: 3px solid transparent; margin-bottom: -1px; }
 [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
 .badge { color: var(--mark); font-weight: 700; margin-left: 3px; font-size: 12px; vertical-align: top; }
@@ -126,15 +129,53 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
 .where { font-family: var(--mono); color: var(--dim); }
 .note { font-size: 12px; color: var(--dim); margin: 10px 0 0; }
 
-.tree, .tree ul { list-style: none; margin: 0; padding: 0; font: 12px/1.5 var(--mono); }
-.tree ul { padding-left: 16px; border-left: 1px solid var(--rule); margin-left: 5px; }
-.tree-row { display: flex; align-items: baseline; gap: 4px; }
-.tree-toggle { background: none; border: 0; padding: 0 2px; width: 18px; color: var(--dim); font: inherit; }
-.tree-pick { background: none; border: 0; padding: 0 2px; font: inherit; text-align: left; }
-.tree-pick:hover { background: var(--mark-wash); }
-.tree-pick b { font-weight: 600; }
-.tree-pick i { font-style: normal; color: var(--mark); }
-.tree-spacer { display: inline-block; width: 18px; }
+/* ---------- syntax tree ---------- */
+.syntax { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tree-tools { display: flex; align-items: center; gap: 8px; flex: none; padding-bottom: 8px; font-size: 12.5px; }
+.tree-tools button, .tree-detail button { background: none; border: 1px solid var(--edge); padding: 2px 10px; font-weight: 500; }
+.tree-tools button:hover:not(:disabled), .tree-detail button:hover { border-color: var(--ink); }
+.tree-tools .sep { width: 1px; height: 16px; background: var(--edge); margin: 0 4px; }
+.tree-tools .grow { flex: 1; }
+.tree-help { color: var(--dim); font-size: 12px; }
+.tree-tools .zoom { min-width: 40px; text-align: center; font-family: var(--mono); color: var(--dim); }
+.tree-scroll { flex: 1; min-height: 120px; overflow: auto; border: 1px solid var(--rule); cursor: grab; }
+.tree-scroll.dragging { cursor: grabbing; user-select: none; }
+.tree-scroll.dragging .tree-pick, .tree-scroll.dragging .tree-toggle { cursor: grabbing; }
+.tree-scroll svg { display: block; }
+.tree-edges { fill: none; stroke: var(--edge); stroke-width: 1; }
+.tree-node text { font: 12px var(--mono); fill: var(--ink); pointer-events: none; }
+.tree-node .kind { font-weight: 600; }
+.tree-node .text { fill: var(--mark); }
+.tree-pick rect { fill: var(--paper); stroke: var(--edge); }
+.tree-pick { cursor: pointer; }
+.tree-pick:hover rect { fill: var(--mark-wash); stroke: var(--ink); }
+.tree-node.selected .tree-pick rect { fill: var(--mark-wash); stroke: var(--mark); stroke-width: 2; }
+.tree-pick:focus-visible, .tree-toggle:focus-visible { outline: 2px solid var(--mark); outline-offset: 1px; }
+.tree-toggle { cursor: pointer; }
+.tree-toggle rect { fill: var(--paper); stroke: var(--dim); }
+.tree-toggle:hover rect { stroke: var(--ink); }
+.tree-toggle text { text-anchor: middle; font-size: 12px; fill: var(--ink); }
+.tree-detail { flex: none; display: flex; align-items: center; gap: 16px; padding-top: 8px; font: 12.5px var(--mono); min-height: 34px; }
+.tree-detail b { font-weight: 600; }
+.tree-detail .hint { color: var(--dim); }
+
+/* The whole views: one of the four takes the place of the code, the side panels and the tape. */
+.fullview { flex: 1; min-height: 0; padding: 12px 24px 16px; display: flex; flex-direction: column; }
+.fullbar { display: flex; align-items: baseline; justify-content: space-between; flex: none; padding-bottom: 8px; }
+.fullbar h2 { margin: 0; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.fullbar button { background: none; border: 1px solid var(--edge); padding: 2px 10px; font-size: 12.5px; font-weight: 500; }
+.fullbar button:hover { border-color: var(--ink); }
+.fullbody { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.fullbody pre.out { font-size: 15px; flex: 1; }
+.fullbody table { font-size: 14px; }
+.app[data-full] > .sheet, .app[data-full] > .tape, .app[data-full] > .mtabs-nav { display: none; }
+/* The four whole views, in the top bar. */
+.whole-views { display: flex; gap: 2px; border: 1px solid var(--edge); }
+.whole-views button { background: none; border: 0; padding: 3px 12px; font-weight: 500; color: var(--dim); }
+.whole-views button:hover { color: var(--ink); }
+.whole-views button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.whole-views .badge { color: var(--mark); }
+.whole-views button[aria-pressed="true"] .badge { color: var(--paper); }
 .symbol-pick { background: none; border: 0; padding: 0; font: inherit; font-weight: 600; text-decoration: underline dotted var(--dim); text-underline-offset: 3px; }
 
 /* ---------- editor ---------- */
@@ -195,7 +236,9 @@ pre.out { margin: 0; font: 14px/1.4 var(--mono); white-space: pre; width: max-co
   body { border-top-width: 4px; }
   .top { padding: 8px 16px; gap: 12px; flex-wrap: wrap; }
   .brand { font-size: 19px; }
-  .menu { order: 3; width: 100%; margin: 0; justify-content: space-between; }
+  .menu { order: 3; width: 100%; margin: 0; justify-content: space-between; flex-wrap: wrap; row-gap: 8px; }
+  .whole-views button { padding: 3px 8px; }
+  .tree-help { display: none; }
   .actions .stop { display: none; }
   .popover { left: 16px; }
   .notice { padding: 6px 16px; }

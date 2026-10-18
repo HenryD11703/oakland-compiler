@@ -1,5 +1,3 @@
-import { useState } from "react";
-import type { AstNode } from "../core/astView";
 import type { Diagnostic } from "../core/diagnostics";
 import type { Span } from "../core/span";
 import type { SymbolEntry } from "../core/symbols";
@@ -83,45 +81,6 @@ export function ProblemsList({ diagnostics, onPick }: { diagnostics: readonly Di
           </button>
         </li>
       ))}
-    </ul>
-  );
-}
-
-// ---------- syntax tree ----------
-
-function TreeNode({ node, depth, onPick }: { node: AstNode; depth: number; onPick: (span: Span) => void }) {
-  const [open, setOpen] = useState(depth < 2);
-  const hasChildren = node.children.length > 0;
-  return (
-    <li>
-      <div className="tree-row">
-        {hasChildren ? (
-          <button type="button" className="tree-toggle" aria-expanded={open} aria-label={`${open ? "Collapse" : "Expand"} ${node.kind}`} onClick={() => setOpen(!open)}>
-            {open ? "▾" : "▸"}
-          </button>
-        ) : (
-          <span className="tree-spacer" />
-        )}
-        <button type="button" className="tree-pick" onClick={() => onPick(node.span)}>
-          <b>{node.kind}</b> <i>{node.label}</i>
-        </button>
-      </div>
-      {hasChildren && open ? (
-        <ul>
-          {node.children.map((child, i) => (
-            <TreeNode key={i} node={child} depth={depth + 1} onPick={onPick} />
-          ))}
-        </ul>
-      ) : null}
-    </li>
-  );
-}
-
-export function AstTree({ ast, onPick }: { ast: AstNode | null; onPick: (span: Span) => void }) {
-  if (!ast || ast.children.length === 0) return <p className="empty">Nothing to show yet.</p>;
-  return (
-    <ul className="tree" data-testid="tree">
-      <TreeNode node={ast} depth={0} onPick={onPick} />
     </ul>
   );
 }

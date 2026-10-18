@@ -7,11 +7,18 @@ import type { RunOutcome } from "../worker/protocol";
 import type { EditorHandle, InlineEntry } from "./Editor";
 import { assignedNames } from "./inlineValues";
 import { DEFAULT_LAYOUT, loadLayout, saveLayout, type Layout } from "./layout";
-import { AstTree, count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
+import { count, OutputView, ProblemsList, SymbolsTable, VariablesTable } from "./Panels";
+import { SyntaxTree } from "./SyntaxTree";
 import { Splitter } from "./Splitter";
 import { Timeline } from "./Timeline";
 
 type Tab = "out" | "problems" | "tree" | "symbols";
+const VIEWS: readonly (readonly [Tab, string])[] = [
+  ["out", "Output"],
+  ["problems", "Problems"],
+  ["tree", "Syntax tree"],
+  ["symbols", "Symbols"],
+];
 type View = "code" | "state" | "views";
 
 /** Steps per second while playing. */
@@ -65,6 +72,8 @@ export function App() {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [tab, setTab] = useState<Tab>("out");
+  /** The view that fills the whole page, or null when the usual layout shows. */
+  const [full, setFull] = useState<Tab | null>(null);
   const [view, setView] = useState<View>("code");
   const [menu, setMenu] = useState(false);
   const [layout, setLayout] = useState<Layout>(loadLayout);
@@ -179,6 +188,15 @@ export function App() {
   };
 
   useEffect(() => {
+    if (full === null) return;
+    const close = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setFull(null);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [full]);
+
+  useEffect(() => {
     if (!menu) return;
     const close = (event: Event): void => {
       if (event instanceof KeyboardEvent && event.key !== "Escape") return;
@@ -257,6 +275,7 @@ export function App() {
   // ---------- views ----------
 
   const reveal = useCallback((span: Parameters<EditorHandle["reveal"]>[0]) => {
+    setFull(null);
     setView("code");
     // The code view must be visible before the editor can measure and scroll to the range.
     requestAnimationFrame(() => editor.current?.reveal(span));
@@ -277,7 +296,7 @@ export function App() {
   const valueText = `${readout}${where ? `, ${where}` : ""}`;
 
   return (
-    <div className="app">
+    <div className="app" data-full={full ?? undefined}>
       <header className="top">
         <h1 className="brand">
           Oak<span>Land</span>
@@ -286,6 +305,14 @@ export function App() {
           <button type="button" className="link-button" aria-expanded={menu} aria-controls="examples-menu" onClick={() => setMenu(!menu)}>
             Examples ▾
           </button>
+          <div className="whole-views" role="group" aria-label="Whole views">
+            {VIEWS.map(([id, label]) => (
+              <button key={id} type="button" aria-pressed={full === id} onClick={() => setFull(full === id ? null : id)}>
+                {label}
+                {id === "problems" && diagnostics.length > 0 ? <span className="badge">{diagnostics.length}</span> : null}
+              </button>
+            ))}
+          </div>
           <span className="file" title={title}>
             {title}
           </span>
@@ -352,6 +379,23 @@ export function App() {
         </div>
       </nav>
 
+      {full !== null ? (
+        <main className="fullview" aria-label={`${VIEWS.find(([id]) => id === full)?.[1] ?? ""}, whole view`}>
+          <div className="fullbar">
+            <h2>{VIEWS.find(([id]) => id === full)?.[1]}</h2>
+            <button type="button" onClick={() => setFull(null)}>
+              Close ✕
+            </button>
+          </div>
+          <div className="fullbody">
+            {full === "out" ? <OutputView text={stdout} total={totalLines} ran={result ? result.ran || syntax.length === 0 : true} /> : null}
+            {full === "problems" ? <ProblemsList diagnostics={diagnostics} onPick={reveal} /> : null}
+            {full === "tree" ? <SyntaxTree ast={result?.ast ?? null} onReveal={reveal} whole /> : null}
+            {full === "symbols" ? <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} /> : null}
+          </div>
+        </main>
+      ) : null}
+
       <main className="sheet" data-view={view} ref={sheetRef} style={sheetStyle}>
         <Suspense
           fallback={
@@ -416,20 +460,18 @@ export function App() {
           <Splitter orientation="horizontal" target={varsRef} label="Resize the variables and the views" min={72} max={maxVars} grow={1} onResize={resizeVars} onReset={resetVars} />
 
           <section className="block views" aria-label="Views">
+            <div className="tabrow">
             <div role="tablist" className="tabs" aria-label="Views">
-              {(
-                [
-                  ["out", "Output"],
-                  ["problems", "Problems"],
-                  ["tree", "Syntax tree"],
-                  ["symbols", "Symbols"],
-                ] as const
-              ).map(([id, label]) => (
+              {VIEWS.map(([id, label]) => (
                 <button key={id} type="button" role="tab" id={`tab-${id}`} aria-selected={tab === id} aria-controls={`pane-${id}`} onClick={() => setTab(id)}>
                   {label}
                   {id === "problems" && diagnostics.length > 0 ? <span className="badge">{diagnostics.length}</span> : null}
                 </button>
               ))}
+            </div>
+            <button type="button" className="expand" onClick={() => setFull(tab)}>
+              Full view ⤢
+            </button>
             </div>
             <div role="tabpanel" id="pane-out" aria-labelledby="tab-out" hidden={tab !== "out"} tabIndex={0}>
               <OutputView text={stdout} total={totalLines} ran={result ? result.ran || syntax.length === 0 : true} />
@@ -438,7 +480,7 @@ export function App() {
               <ProblemsList diagnostics={diagnostics} onPick={reveal} />
             </div>
             <div role="tabpanel" id="pane-tree" aria-labelledby="tab-tree" hidden={tab !== "tree"} tabIndex={0}>
-              <AstTree ast={result?.ast ?? null} onPick={reveal} />
+              <SyntaxTree ast={result?.ast ?? null} onReveal={reveal} />
             </div>
             <div role="tabpanel" id="pane-symbols" aria-labelledby="tab-symbols" hidden={tab !== "symbols"} tabIndex={0}>
               <SymbolsTable symbols={result?.symbols ?? []} onPick={reveal} />
